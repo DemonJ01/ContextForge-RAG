@@ -33,10 +33,9 @@ The saved index contains **11 documents**: 6 reference documents and 5 distracto
 
 ```bash
 python -m pip install -r requirements-cloud.txt
-cp .env.example .env
 ```
 
-Set `RAG_MODE=cloud` and configure Groq, Portkey, Gemini, and Qdrant credentials in `.env`. The Portkey slug settings must match integrations in your account. `RAG_EMBEDDING_BACKEND` defaults to `gemini` (3072 dimensions); explicitly choose `local` for all-mpnet-base-v2 embeddings (768 dimensions). Use the same backend for ingestion and queries; provider failures stop the operation instead of changing models. Ingest documents into the selected Qdrant collection before querying it:
+Create a private `.env` file in the project root, set `RAG_MODE=cloud`, and configure Groq, Portkey, Gemini, and Qdrant credentials using the [configuration guide](docs/environment_variables.md). The Portkey slug settings must match integrations in your account. `RAG_EMBEDDING_BACKEND` defaults to `gemini` (3072 dimensions); explicitly choose `local` for all-mpnet-base-v2 embeddings (768 dimensions). Use the same backend for ingestion and queries; provider failures stop the operation instead of changing models. Ingest documents into the selected Qdrant collection before querying it:
 
 ```bash
 python -m rag.ingestion.document_processor data
@@ -74,7 +73,7 @@ python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
 ```
 
-The tests exercise retrieval relevance, no-evidence answers, chunk limits, source integrity, session IDs, request validation, HTTP failures, static assets, and frontend/backend contracts. See [runtime verification](docs/rag_runtime_verification.md) for the browser checks performed during this change.
+The tests exercise retrieval relevance, no-evidence answers, chunk limits, source integrity, session IDs, request validation, HTTP failures, static assets, and frontend/backend contracts.
 
 ## Container
 
@@ -107,4 +106,4 @@ requirements-evaluation.txt   Optional evaluation and Streamlit dependencies
 tests/                        Retrieval and API regression tests
 ```
 
-[Configuration](docs/environment_variables.md) · [UI design](docs/rag_ui_design.md) · [Improvement backlog](docs/rag_improvements.md) · [File provenance](docs/file_renames.json) · [Original cloud architecture](docs/architecture.md)
+[Configuration](docs/environment_variables.md) · [Cloud architecture](docs/architecture.md)

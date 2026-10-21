@@ -1,6 +1,6 @@
 # RAG environment variables
 
-Local mode works without a `.env` file or provider keys. To configure the optional cloud mode, copy `.env.example` to `.env` in the project root and set `RAG_MODE=cloud`. [`rag/settings.py`](../rag/settings.py) loads environment values with `python-dotenv` and `os.getenv`; it currently uses a plain settings class without schema validation.
+Local mode works without a `.env` file or provider keys. To configure the optional cloud mode, create a private `.env` file in the project root, set `RAG_MODE=cloud`, and add the required provider settings listed below. [`rag/settings.py`](../rag/settings.py) loads environment values with `python-dotenv` and `os.getenv`; it currently uses a plain settings class without schema validation.
 
 | Variable | Purpose | Default or example |
 | `RAG_MODE` | Selects the credential-free extractive engine or configured cloud pipeline | `local` or `cloud` |

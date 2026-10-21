@@ -27,7 +27,6 @@ wheels/
 # Environment variables
 .env
 .env.*
-!.env.example
 
 # Credentials and private keys
 *.pem
