@@ -8,6 +8,8 @@ class AgentState(TypedDict):
     messages: Annotated[List[dict], operator.add]
     current_query: str
     documents: List[str]
+    scope: str
+    top_k: int
     plan: List[str]
     status: str
     final_answer: str

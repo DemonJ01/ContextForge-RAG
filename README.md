@@ -2,6 +2,8 @@
 
 A document workspace with a connected chat interface, searchable library, and inspectable source evidence. FastAPI serves the frontend and backend together, so one process runs the application.
 
+Repository: [DemonJ01/ContextForge-RAG](https://github.com/DemonJ01/ContextForge-RAG). GitHub Actions runs the unit suite on Python 3.11 and 3.12 and checks the live workspace in Chromium on every push and pull request.
+
 The default **local mode works without API keys**. It ranks the included document text with BM25 and returns cited source excerpts. It does not run a language model. The optional cloud mode uses the original LangGraph, Groq/Portkey, Gemini, Qdrant, FlashRank, and NeMo pipeline.
 
 ## Start
@@ -36,14 +38,16 @@ python -m pip install -r requirements-cloud.txt
 cp .env.example .env
 ```
 
-Set `RAG_MODE=cloud` and configure Groq, Portkey, Gemini, and Qdrant credentials in `.env`. The Portkey slug settings must match integrations in your account. Ingest documents into the selected Qdrant collection before querying it:
+Set `RAG_MODE=cloud` and configure Groq, Portkey, Gemini, and Qdrant credentials in `.env`. The Portkey slug settings must match integrations in your account. `RAG_EMBEDDING_BACKEND` defaults to `gemini` (3072 dimensions); explicitly choose `local` for all-mpnet-base-v2 embeddings (768 dimensions). Use the same backend for ingestion and queries; provider failures stop the operation instead of changing models. Ingest documents into the selected Qdrant collection before querying it:
 
 ```bash
 python -m rag.ingestion.document_processor data
 python run_rag.py
 ```
 
-`QDRANT_COLLECTION` defaults to `rag`. Set it to an existing collection name to reuse that collection, matching its embedding model and dimensions. The optional ingestion `--wipe` flag deletes and recreates the selected remote collection. Cloud configuration failures return HTTP 503; the app does not silently switch to local answers.
+`QDRANT_COLLECTION` defaults to `rag`. Set it to an existing collection name to reuse that collection, matching its embedding model and dimensions. The optional ingestion `--wipe` flag deletes and recreates the selected remote collection after validating the source directory and initializing the embedding provider. Cloud configuration failures return HTTP 503; the app does not silently switch to local answers.
+
+Cloud requests honor `scope` and `top_k`. Reference scope selects remote points with `source_type=true`; use the full index for other source types. Re-ingestion replaces chunks for the same filename and source type, including obsolete chunks when a document shrinks. Failed embedding, indexing, and cleanup operations stop ingestion with an error. The bundled local index is loaded at startup, so restart the app after regenerating its processed documents.
 
 The default Docker image supports local mode. A cloud image needs the optional cloud dependencies added explicitly.
 

@@ -1,5 +1,6 @@
 from playwright.sync_api import sync_playwright, expect
 from pathlib import Path
+from datetime import datetime, timezone
 import json, os, tempfile
 
 BASE=os.getenv('RAG_BASE_URL','http://127.0.0.1:8000')
@@ -27,7 +28,7 @@ with sync_playwright() as p:
     expect(page.locator('#library-count')).to_have_text('11')
     expect(page.locator('#send-button')).to_be_disabled()
     no_overflow(page,'desktop_empty')
-    page.screenshot(path=str(OUT/'rag-desktop.png'),full_page=False)
+    page.screenshot(path=str(OUT/'rag-desktop.png'),full_page=False,animations='disabled')
     record('live_connection_and_real_index_counts')
     # Shift+Enter leaves a draft, Enter submits once to the real API.
     question=page.locator('#question')
@@ -44,7 +45,7 @@ with sync_playwright() as p:
     expect(page.locator('#evidence-panel .evidence-card')).to_have_count(len(answer['citations']))
     assert 'Cron' in page.locator('.answer-content').inner_text()
     no_overflow(page,'desktop_answer')
-    page.screenshot(path=str(OUT/'rag-answer.png'),full_page=False)
+    page.screenshot(path=str(OUT/'rag-answer.png'),full_page=False,animations='disabled')
     record('question_to_real_api_answer_and_evidence',{'citations':len(answer['citations']),'mode':answer['mode']})
     # Open exact document text from the citation rail.
     page.locator('.evidence-open').first.click()
@@ -126,7 +127,7 @@ with sync_playwright() as p:
             page.keyboard.press('Escape')
             expect(page.locator('#evidence-panel')).not_to_be_visible()
         else: page.locator('#close-evidence').click()
-        if width==375: page.screenshot(path=str(OUT/'rag-mobile.png'),full_page=False)
+        if width==375: page.screenshot(path=str(OUT/'rag-mobile.png'),full_page=False,animations='disabled')
     record('responsive_widths_and_keyboard_drawers',results)
     page.emulate_media(reduced_motion='reduce')
     assert page.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches")
@@ -144,6 +145,26 @@ with sync_playwright() as p:
     assert page.locator('.answer-content img').count()==0
     page.unroute('**/query',hostile_answer)
     record('untrusted_answer_and_source_html_inert')
+    # A result received while browsing the library must appear on return.
+    page.locator('#new-chat').click()
+    held_queries=[]
+    def hold_query(route): held_queries.append(route)
+    page.route('**/query',hold_query)
+    page.locator('#question').fill('How do Kubernetes CronJobs work?')
+    page.locator('#send-button').click()
+    expect(page.locator('.pending-message')).to_be_visible()
+    page.locator('#top-library').click()
+    expect(page.locator('#library-view')).to_be_visible()
+    live_result=context.request.post(BASE+'/query',data={'q':'How do Kubernetes CronJobs work?'})
+    assert live_result.status==200
+    assert len(held_queries)==1
+    held_queries[0].fulfill(status=200,content_type='application/json',body=live_result.text())
+    page.unroute('**/query',hold_query)
+    expect(page.locator('#send-button')).to_have_attribute('aria-label','Send question')
+    page.locator('#top-library').click()
+    expect(page.locator('.pending-message')).to_have_count(0)
+    expect(page.locator('.message-answer .answer-content')).to_have_count(1)
+    record('completed_query_visible_after_library_navigation')
     # Only this fresh browser context's test history is removed.
     page.locator('#clear-history').click()
     expect(page.locator('#clear-dialog')).to_be_visible()
@@ -151,8 +172,35 @@ with sync_playwright() as p:
     expect(page.locator('#empty-state')).to_be_visible()
     expect(page.locator('#conversation-list .history-item')).to_have_count(0)
     record('clear_browser_history')
+    # Exercise cloud UI request contracts without contacting any providers.
+    cloud_queries=[]
+    def cloud_health(route):
+        route.fulfill(status=200,content_type='application/json',body=json.dumps({'status':'ready','mode':'cloud','document_count':11,'reference_document_count':6,'chunk_count':100,'generation':'cloud','retrieval':'Qdrant + FlashRank'}))
+    def cloud_query(route):
+        cloud_queries.append(route.request.post_data_json)
+        route.fulfill(status=200,content_type='application/json',body=json.dumps({'answer':'Cloud request scope verified.','mode':'cloud','elapsed_ms':1,'status':'complete','sources':[],'citations':[]}))
+    page.route('**/health',cloud_health)
+    page.route('**/query',cloud_query)
+    page.reload(wait_until='networkidle')
+    expect(page.locator('#connection-label')).to_have_text('Cloud · remote index')
+    expect(page.locator('#scope')).to_be_visible()
+    expect(page.locator('#scope')).to_be_enabled()
+    page.locator('#question').fill('How do Kubernetes CronJobs work?')
+    page.locator('#send-button').click()
+    expect(page.locator('.message-answer')).to_have_count(1)
+    assert cloud_queries[-1]['scope']=='reference' and cloud_queries[-1]['top_k']==4
+    page.locator('#scope').select_option('all')
+    expect(page.locator('#scope-help')).to_contain_text('entire remote index')
+    page.locator('#question').fill('How do Kubernetes Jobs work?')
+    page.locator('#send-button').click()
+    expect(page.locator('.message-answer')).to_have_count(2)
+    assert cloud_queries[-1]['scope']=='all' and cloud_queries[-1]['top_k']==4
+    page.unroute('**/health',cloud_health)
+    page.unroute('**/query',cloud_query)
+    record('cloud_scope_control_and_request_contract')
     assert not errors, errors
-    report={'checks':checks,'page_errors':errors,'failed_requests':failed_requests,'base_url':BASE}
+    assert not failed_requests, failed_requests
+    report={'verified_at':datetime.now(timezone.utc).isoformat(),'browser_version':browser.version,'checks':checks,'page_errors':errors,'failed_requests':failed_requests,'base_url':BASE}
     (OUT/'browser_results.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
     browser.close()

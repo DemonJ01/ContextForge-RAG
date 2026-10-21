@@ -6,6 +6,8 @@ def chunk_text(text: str, chunk_size: int = 1500) -> List[str]:
     Simple semantic-ish chunker that splits by paragraphs.
     Ensures chunks do not exceed the specified size.
     """
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be positive")
     with logfire.span("✂️ Text Chunking", text_length=len(text)):
         if not text.strip(): 
             return []
@@ -14,13 +16,18 @@ def chunk_text(text: str, chunk_size: int = 1500) -> List[str]:
         chunks = []
         current_chunk = ""
         
-        for p in paragraphs:
-            if len(current_chunk) + len(p) < chunk_size:
-                current_chunk += p + "\n\n"
-            else:
+        for paragraph in paragraphs:
+            # A single paragraph can exceed the budget (PDF text often has no
+            # blank lines). Split it before packing, preserving every character.
+            for start in range(0, len(paragraph), chunk_size):
+                p = paragraph[start:start + chunk_size]
+                separator = "\n\n" if current_chunk else ""
+                if len(current_chunk) + len(separator) + len(p) <= chunk_size:
+                    current_chunk += separator + p
+                    continue
                 if current_chunk.strip():
                     chunks.append(current_chunk.strip())
-                current_chunk = p + "\n\n"
+                current_chunk = p
         
         if current_chunk.strip():
             chunks.append(current_chunk.strip())

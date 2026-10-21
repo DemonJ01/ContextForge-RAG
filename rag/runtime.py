@@ -51,10 +51,15 @@ class RAGRuntime:
         with self._cloud_lock:
             if self._cloud_components is not None:
                 return self._cloud_components
+            embedding_backend = os.getenv("RAG_EMBEDDING_BACKEND", "gemini").strip().lower()
+            if embedding_backend not in {"gemini", "local"}:
+                raise RuntimeUnavailable("RAG_EMBEDDING_BACKEND must be either 'gemini' or 'local'.")
             required = (
-                "PORTKEY_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY",
+                "PORTKEY_API_KEY", "GROQ_API_KEY",
                 "QDRANT_CLUSTER_ENDPOINT", "QDRANT_API_KEY",
             )
+            if embedding_backend == "gemini":
+                required += ("GEMINI_API_KEY",)
             missing = [name for name in required if not os.getenv(name, "").strip()]
             if missing:
                 raise RuntimeUnavailable(
@@ -124,6 +129,8 @@ class RAGRuntime:
         initial_state = {
             "messages": [{"role": "user", "content": q}],
             "current_query": q,
+            "scope": scope,
+            "top_k": top_k,
             "documents": [],
             "plan": ["Start"],
             "status": "Initializing Graph...",

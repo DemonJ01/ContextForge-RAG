@@ -1,4 +1,6 @@
 {
+  "verified_at": "2026-10-21T15:09:35.183381+00:00",
+  "browser_version": "151.0.7922.34",
   "checks": [
     {
       "check": "live_connection_and_real_index_counts",
@@ -69,11 +71,19 @@
       "result": true
     },
     {
+      "check": "completed_query_visible_after_library_navigation",
+      "result": true
+    },
+    {
       "check": "clear_browser_history",
+      "result": true
+    },
+    {
+      "check": "cloud_scope_control_and_request_contract",
       "result": true
     }
   ],
   "page_errors": [],
   "failed_requests": [],
-  "base_url": "http://127.0.0.1:8000"
+  "base_url": "http://127.0.0.1:8765"
 }

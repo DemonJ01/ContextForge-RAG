@@ -256,6 +256,8 @@ with tab2:
             st.session_state.pipeline_done = True
 
         g_progress.progress(100, text="✅ Guardrails tests complete!")
+        if g_metrics["errors"]:
+            st.warning(f"{g_metrics['errors']} guardrail requests failed. Metrics cover {g_metrics['completed']} completed requests.")
 
         g_rows_live = []
         for r in g_results:
@@ -267,13 +269,13 @@ with tab2:
                 "ID": r["id"],
                 "Input": r["input"][:70],
                 "Expected": "🛡️ Block" if r["expected_blocked"] else "✅ Pass",
-                "Actual": "Blocked" if r["actual_blocked"] else "Passed",
+                "Actual": "Request failed" if r["actual_blocked"] is None else "Blocked" if r["actual_blocked"] else "Passed",
                 "Result": result_label,
             })
         st.dataframe(pd.DataFrame(g_rows_live), use_container_width=True, hide_index=True)
 
         mc1, mc2, mc3, mc4 = st.columns(4)
-        mc1.metric("Correct", f"{g_metrics['correct']}/{g_metrics['total']}")
+        mc1.metric("Correct", f"{g_metrics['correct']}/{g_metrics['completed']}")
         mc2.metric("Precision", f"{g_metrics['precision']:.2f}")
         mc3.metric("Recall", f"{g_metrics['recall']:.2f}")
         mc4.metric("Accuracy", f"{g_metrics['accuracy']:.2f}")
@@ -309,8 +311,10 @@ with tab2:
                 })
             st.dataframe(pd.DataFrame(g_rows_prev), use_container_width=True, hide_index=True)
             gm = compute_guardrails_metrics(st.session_state.guardrails_results)
+            if gm["errors"]:
+                st.warning(f"{gm['errors']} guardrail requests failed. Metrics cover {gm['completed']} completed requests.")
             mc1, mc2, mc3, mc4 = st.columns(4)
-            mc1.metric("Correct", f"{gm['correct']}/{gm['total']}")
+            mc1.metric("Correct", f"{gm['correct']}/{gm['completed']}")
             mc2.metric("Precision", f"{gm['precision']:.2f}")
             mc3.metric("Recall", f"{gm['recall']:.2f}")
             mc4.metric("Accuracy", f"{gm['accuracy']:.2f}")
@@ -416,8 +420,8 @@ with tab3:
                 gm = compute_guardrails_metrics(st.session_state.guardrails_results)
                 st.metric(
                     label="🛡️ Guardrails Accuracy",
-                    value=f"{gm['correct']}/{gm['total']}",
-                    delta=f"Precision {gm['precision']:.2f} | Recall {gm['recall']:.2f}",
+                    value=f"{gm['correct']}/{gm['completed']}",
+                    delta=f"Precision {gm['precision']:.2f} | Recall {gm['recall']:.2f} | Errors {gm['errors']}",
                 )
 
             summary_df = pd.DataFrame([

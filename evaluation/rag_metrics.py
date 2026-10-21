@@ -68,7 +68,9 @@ def _prep_samples(golden_dataset: dict) -> list:
         response = s.get("actual_response", "").strip()
         if not response:
             continue
-        raw_contexts = s.get("actual_contexts") or s.get("relevant_contexts") or []
+        # An empty live retrieval is a result, never permission to substitute
+        # answer-key evidence and inflate grounding/recall metrics.
+        raw_contexts = s.get("actual_contexts", s.get("relevant_contexts", [])) or []
         contexts = [c[:CONTEXT_TRUNCATE] for c in raw_contexts[:CONTEXT_LIMIT]]
         valid.append({**s, "actual_contexts": contexts})
     return valid

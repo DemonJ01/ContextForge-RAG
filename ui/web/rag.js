@@ -113,10 +113,10 @@
     $("send-button").disabled = pending || !$("question").value.trim();
     $("send-button").setAttribute("aria-label", pending ? "Search in progress" : "Send question");
     $("query-form").setAttribute("aria-busy", String(pending));
-    $("scope").disabled = pending || isCloud();
-    $("scope").parentElement.hidden = isCloud();
+    $("scope").disabled = pending;
     $("scope-help").textContent = isCloud()
-      ? "Searching your remote index. The library contains bundled documents."
+      ? state.scope === "all" ? "Searching your entire remote index. The library contains bundled documents."
+        : "Searching reference documents in your remote index. The library contains bundled documents."
       : state.scope === "all" ? "Searching reference and extended library documents."
         : "Answers begin with your reference documents.";
     document.querySelectorAll(".suggestion").forEach((button) => { button.disabled = pending; });
@@ -326,8 +326,7 @@
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120000);
     try {
-      const payload = { q: trimmed, thread_id: conversation.id };
-      if (!isCloud()) Object.assign(payload, { scope, top_k: 4 });
+      const payload = { q: trimmed, thread_id: conversation.id, scope, top_k: 4 };
       const response = await request("/query", { method: "POST", body: JSON.stringify(payload), signal: controller.signal });
       if (typeof response.answer !== "string" || !response.answer.trim() || response.status === "error") {
         throw new Error("The search returned no answer. Please try again or ask a more specific question.");
@@ -616,7 +615,13 @@
     $("new-chat").addEventListener("click", newConversation);
     $("chat-nav").addEventListener("click", () => { showView("chat"); renderConversation(false); });
     $("library-nav").addEventListener("click", () => showView("library"));
-    $("top-library").addEventListener("click", () => showView(state.view === "library" ? "chat" : "library"));
+    $("top-library").addEventListener("click", () => {
+      const view = state.view === "library" ? "chat" : "library";
+      showView(view);
+      // A query can finish while the library is visible. Render the saved
+      // result when returning, rather than leaving its old loading state.
+      if (view === "chat") renderConversation(false);
+    });
     $("document-search").addEventListener("input", renderLibrary);
     $("document-filter").addEventListener("change", renderLibrary);
     $("close-document").addEventListener("click", () => $("document-dialog").close());

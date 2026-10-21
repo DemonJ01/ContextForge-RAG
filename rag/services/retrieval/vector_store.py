@@ -11,7 +11,7 @@ client = QdrantClient(
     api_key=settings.QDRANT_API_KEY
 )
 
-def search_rag_knowledge(query: str, limit: int = 8):
+def search_rag_knowledge(query: str, limit: int = 8, scope: str = "all"):
     """
     Searches the RAG knowledge base.
     Uses the modern query_points interface.
@@ -23,6 +23,9 @@ def search_rag_knowledge(query: str, limit: int = 8):
         response = client.query_points(
             collection_name=settings.QDRANT_COLLECTION,
             query=query_vector,
+            query_filter=models.Filter(must=[models.FieldCondition(
+                key="source_type", match=models.MatchValue(value="true")
+            )]) if scope == "reference" else None,
             limit=limit,
             with_payload=True # JSON
         )
@@ -38,4 +41,4 @@ def search_rag_knowledge(query: str, limit: int = 8):
         return results
     except Exception as e:
         logfire.error(f"❌ Qdrant Search Failed: {e}")
-        return []
+        raise RuntimeError("Cloud document search failed. Check the embedding provider and Qdrant configuration.") from e

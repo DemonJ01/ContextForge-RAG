@@ -78,9 +78,13 @@ def process_file(file_path: str, filename: str, source_type: str):
             # 4. Embed and index in Qdrant
             with logfire.span("Vectorizing & Indexing"):
                 embeddings = embed_texts(chunks)
+                if len(embeddings) != len(chunks):
+                    raise ValueError("Embedding count does not match the document chunk count.")
                 points = [
                     models.PointStruct(
-                        id=str(uuid.uuid4()),
+                        # Re-running ingestion replaces existing chunk vectors
+                        # instead of accumulating duplicates for every run.
+                        id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"rag:{source_type}:{filename}:{index}")),
                         vector=vector,
                         payload={
                             "text": chunk,
@@ -88,17 +92,33 @@ def process_file(file_path: str, filename: str, source_type: str):
                             "source_type": source_type,
                         },
                     )
-                    for chunk, vector in zip(chunks, embeddings)
+                    for index, (chunk, vector) in enumerate(zip(chunks, embeddings))
                 ]
 
                 qdrant_client.upsert(
                     collection_name=settings.QDRANT_COLLECTION,
                     points=points,
+                    wait=True,
+                )
+                # Remove obsolete tail chunks and legacy random-ID vectors only
+                # after the replacement vectors have been accepted. Restrict the
+                # cleanup to this source, preserving all newly written IDs.
+                qdrant_client.delete(
+                    collection_name=settings.QDRANT_COLLECTION,
+                    points_selector=models.FilterSelector(filter=models.Filter(
+                        must=[
+                            models.FieldCondition(key="source", match=models.MatchValue(value=filename)),
+                            models.FieldCondition(key="source_type", match=models.MatchValue(value=source_type)),
+                        ],
+                        must_not=[models.HasIdCondition(has_id=[point.id for point in points])],
+                    )),
+                    wait=True,
                 )
                 logfire.info(f"Indexed {len(points)} points to Qdrant from {filename}.")
 
         except Exception as e:
             logfire.error(f"Failed to process {filename}: {e}")
+            raise
 
 
 def process_directory(dir_path: str, source_type: str):
@@ -115,7 +135,13 @@ def run_universal_ingestion(base_dir: str, explicit_source_type: str = None, wip
     Scan base_dir, map sub-folders to source types, and ingest all documents.
     Pass --wipe to drop and recreate the Qdrant collection before ingestion.
     """
+    # Validate the source before allowing --wipe to mutate the remote collection.
+    if not os.path.isdir(base_dir):
+        raise ValueError(f"Ingestion source is not a directory: {base_dir}")
     with logfire.span("Universal Ingestion Started", base_directory=base_dir):
+        # Initialize and probe embeddings before --wipe can remove a working
+        # index. Missing credentials or an unavailable model must leave it intact.
+        dim = get_embedding_dim()
 
         # Wipe collection if requested
         if wipe:
@@ -126,7 +152,6 @@ def run_universal_ingestion(base_dir: str, explicit_source_type: str = None, wip
 
         # Recreate collection — dimension resolved at runtime after embedding model probe
         if not qdrant_client.collection_exists(settings.QDRANT_COLLECTION):
-            dim = get_embedding_dim()
             qdrant_client.create_collection(
                 collection_name=settings.QDRANT_COLLECTION,
                 vectors_config=models.VectorParams(
@@ -138,6 +163,14 @@ def run_universal_ingestion(base_dir: str, explicit_source_type: str = None, wip
                 f"Created collection '{settings.QDRANT_COLLECTION}' "
                 f"({dim}-dim, Cosine)."
             )
+        else:
+            vectors = qdrant_client.get_collection(settings.QDRANT_COLLECTION).config.params.vectors
+            stored_dim = getattr(vectors, "size", None)
+            if stored_dim != dim:
+                raise ValueError(
+                    "The Qdrant collection does not match the active embedding dimensions. "
+                    "Select a compatible collection or explicitly rebuild the collection with --wipe."
+                )
 
         # Route to sub-folders or treat the whole dir as one source
         subdirs = [

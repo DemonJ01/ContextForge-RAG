@@ -177,12 +177,33 @@ class RuntimeModeTests(unittest.TestCase):
         agent = Agent()
         runtime._cloud_components = (agent, lambda q: (False, None))
         with TestClient(create_app(runtime=runtime)) as client:
-            response = client.post("/query", json={"q": "  How do jobs work?  ", "thread_id": "unique123"})
+            response = client.post("/query", json={"q": "  How do jobs work?  ", "thread_id": "unique123", "scope": "all", "top_k": 2})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["mode"], "cloud")
         self.assertEqual(response.json()["sources"], ["Evidence"])
         self.assertEqual(agent.config["configurable"]["thread_id"], "unique123")
         self.assertEqual(agent.state["messages"], [{"role": "user", "content": "How do jobs work?"}])
+        self.assertEqual(agent.state["scope"], "all")
+        self.assertEqual(agent.state["top_k"], 2)
+
+    def test_cloud_local_embeddings_do_not_require_a_gemini_key(self):
+        environment = {name: "test-value" for name in (
+            "PORTKEY_API_KEY", "GROQ_API_KEY", "QDRANT_CLUSTER_ENDPOINT", "QDRANT_API_KEY",
+        )}
+        environment["RAG_EMBEDDING_BACKEND"] = "local"
+        with patch.dict(os.environ, environment, clear=True):
+            runtime = RAGRuntime(PROJECT_ROOT, mode="cloud")
+            # Reaching the SDK import proves credential validation passed.
+            with patch("rag.runtime.importlib.import_module", side_effect=ImportError("missing cloud SDK")):
+                with self.assertRaisesRegex(RuntimeUnavailable, "Cloud dependencies"):
+                    runtime.cloud_components()
+
+    def test_cloud_rejects_an_unknown_embedding_backend_before_importing_sdks(self):
+        with patch.dict(os.environ, {"RAG_EMBEDDING_BACKEND": "automatic"}, clear=True):
+            runtime = RAGRuntime(PROJECT_ROOT, mode="cloud")
+            with patch("rag.runtime.importlib.import_module", side_effect=AssertionError("Unexpected SDK import")):
+                with self.assertRaisesRegex(RuntimeUnavailable, "RAG_EMBEDDING_BACKEND"):
+                    runtime.cloud_components()
 
     def test_cloud_technical_answer_requires_nonblank_source_evidence(self):
         class Agent:

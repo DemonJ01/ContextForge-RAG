@@ -12,6 +12,7 @@ import json
 import os
 import requests
 import logfire
+from uuid import uuid4
 
 from rag.client_config import backend_url
 
@@ -33,7 +34,7 @@ def detect_tool(thought_process: list) -> str:
     joined = " ".join(thought_process).lower()
     if "guardrails fired" in joined:
         return "guardrails"
-    if "intent: technical" in joined or "search term:" in joined or "context retrieved" in joined:
+    if "intent: technical" in joined or "search term:" in joined or "context retrieved" in joined or "bm25 retrieval" in joined:
         return "retrieve_documents"
     if "conversational" in joined or "memory" in joined:
         return "direct_answer"
@@ -49,6 +50,7 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
     dataset = copy.deepcopy(golden_dataset)
     samples = dataset["rag_samples"]
     n = len(samples)
+    run_id = uuid4().hex
 
     with logfire.span("🚀 Eval Phase 1 — Live Pipeline", total_samples=n):
         for i, sample in enumerate(samples):
@@ -65,7 +67,7 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
                 try:
                     resp = requests.post(
                         API_URL,
-                        json={"q": question, "thread_id": f"eval_run_{i}"},
+                        json={"q": question, "thread_id": f"eval_{run_id}_{i}"},
                         timeout=REQUEST_TIMEOUT,
                     )
                     resp.raise_for_status()
@@ -89,13 +91,13 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
                 except requests.exceptions.ConnectionError:
                     logfire.error("❌ Cannot reach FastAPI — is the app running on :8000?")
                     sample["actual_response"] = ""
-                    sample["actual_contexts"] = sample.get("relevant_contexts", [])
+                    sample["actual_contexts"] = []
                     sample["actual_tools_called"] = ["unknown"]
 
                 except Exception as e:
                     logfire.error(f"❌ Query failed: {e}")
                     sample["actual_response"] = ""
-                    sample["actual_contexts"] = sample.get("relevant_contexts", [])
+                    sample["actual_contexts"] = []
                     sample["actual_tools_called"] = ["unknown"]
 
             if progress_callback:
