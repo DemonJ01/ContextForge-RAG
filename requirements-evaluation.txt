@@ -1,0 +1,8 @@
+# Optional legacy Streamlit and cloud-backed evaluation tools.
+-r requirements-cloud.txt
+streamlit
+pandas
+nest-asyncio
+ragas
+deepeval
+langfuse

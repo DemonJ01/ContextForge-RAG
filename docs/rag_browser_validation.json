@@ -1,0 +1,79 @@
+{
+  "checks": [
+    {
+      "check": "live_connection_and_real_index_counts",
+      "result": true
+    },
+    {
+      "check": "question_to_real_api_answer_and_evidence",
+      "result": {
+        "citations": 4,
+        "mode": "local"
+      }
+    },
+    {
+      "check": "citation_opens_resolving_source_document",
+      "result": true
+    },
+    {
+      "check": "copy_answer",
+      "result": true
+    },
+    {
+      "check": "library_filter_search_details_and_empty_recovery",
+      "result": true
+    },
+    {
+      "check": "new_conversation_history_and_reload_restore",
+      "result": true
+    },
+    {
+      "check": "unsupported_question_no_evidence",
+      "result": true
+    },
+    {
+      "check": "http_error_and_successful_real_retry",
+      "result": true
+    },
+    {
+      "check": "responsive_widths_and_keyboard_drawers",
+      "result": [
+        {
+          "width": 1440,
+          "scrollWidth": 1440
+        },
+        {
+          "width": 1024,
+          "scrollWidth": 1024
+        },
+        {
+          "width": 768,
+          "scrollWidth": 768
+        },
+        {
+          "width": 375,
+          "scrollWidth": 375
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320
+        }
+      ]
+    },
+    {
+      "check": "reduced_motion_preference",
+      "result": true
+    },
+    {
+      "check": "untrusted_answer_and_source_html_inert",
+      "result": true
+    },
+    {
+      "check": "clear_browser_history",
+      "result": true
+    }
+  ],
+  "page_errors": [],
+  "failed_requests": [],
+  "base_url": "http://127.0.0.1:8000"
+}

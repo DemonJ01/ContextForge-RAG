@@ -1,0 +1,59 @@
+# This file controls what gets uploaded to Cloud Build (source tarball).
+# Include rag/, ui/web/, processed_documents/, and runtime requirements.
+.gcloudignore
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+build/
+dist/
+wheels/
+
+# Virtual environments (huge — never needed)
+venv/
+.venv/
+env/
+genv/
+rag_env/
+tenvv/
+
+# Secrets
+.env
+commands.md
+
+# Git & IDE
+.git/
+.gitignore
+.dockerignore
+.vscode/
+.idea/
+
+# Observability local state
+.logfire/
+
+# Claude Code memory
+.claude/
+
+# Source documents — parsed locally, not needed for the build
+data/
+
+# Eval suite — local only
+evaluation/
+
+# Legacy Streamlit scripts only; keep ui/web/ in the build
+
+# Notebooks & docs
+notebooks/
+docs/
+README.md
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+ui/*.py
+tests/

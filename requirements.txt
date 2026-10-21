@@ -1,0 +1,4 @@
+# Minimal runtime for the integrated UI and local RAG engine.
+fastapi==0.141.1
+uvicorn==0.52.3
+python-dotenv==1.2.3

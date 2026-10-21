@@ -1,0 +1,2 @@
+# The API container serves both the UI and local retrieval.
+-r requirements.txt

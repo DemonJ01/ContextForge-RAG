@@ -1,0 +1,3 @@
+# Optional live-browser verification. Install Chromium separately with Playwright.
+-r requirements-dev.txt
+playwright==1.62.0

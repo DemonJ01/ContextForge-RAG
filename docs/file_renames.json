@@ -1,0 +1,652 @@
+[
+  {
+    "from": "ARCHITECTURE.md",
+    "to": "docs/architecture.md",
+    "sha256_before": "e8cd196e58531012aa4c7c28cf4aee17c43dd8b29dd9b67aa387566566a117d0"
+  },
+  {
+    "from": "DATA/noisy_data/100G Networking Technology Overview - Slides - Toronto (August 2016).pdf",
+    "to": "data/noisy_data/100g_networking_technology_overview_slides_toronto_august_2016.pdf",
+    "sha256_before": "c2827b808cf61250ae38c5768fdf11e7e3da327403150950fbe0fb37d4fab11c"
+  },
+  {
+    "from": "DATA/noisy_data/2018 CppCon Unwinding the Stack - Exploring how C++ Exceptions work on Windows - James McNellis.pdf",
+    "to": "data/noisy_data/2018_cppcon_unwinding_the_stack_exploring_how_cpp_exceptions_work_on_windows_james_mcnellis.pdf",
+    "sha256_before": "e7ba3e3b338e5b68e374309e8c595fbe5de680445a0513f948f7a574ca0de0ca"
+  },
+  {
+    "from": "DATA/noisy_data/37 Million Compilations - Investigating Novice Programming Mistakes in Large-Scale Student Data (fp1187-altadmri).pdf",
+    "to": "data/noisy_data/37_million_compilations_investigating_novice_programming_mistakes_in_large_scale_student_data_fp1187_altadmri.pdf",
+    "sha256_before": "ff2dbc789f719843755449cd7b69341c81712f6fccc1d97221288f0ade1c95ea"
+  },
+  {
+    "from": "DATA/noisy_data/5-Level Paging and 5-Level EPT - Intel - Revision 1.0 (December, 2016).pdf",
+    "to": "data/noisy_data/5_level_paging_and_5_level_ept_intel_revision_1_0_december_2016.pdf",
+    "sha256_before": "55ac87d9bdd2a6bae6ba4aed13269a72f1033e98bdb97759664a5e9ee77dc36b"
+  },
+  {
+    "from": "DATA/noisy_data/5-Level Paging and 5-Level EPT - Intel - Revision 1.1 (May, 2017).pdf",
+    "to": "data/noisy_data/5_level_paging_and_5_level_ept_intel_revision_1_1_may_2017.pdf",
+    "sha256_before": "adb2a5e99912c005e416f5099add45e39772d36068539446584014725a623afa"
+  },
+  {
+    "from": "DATA/noisy_data/A Block-sorting Lossless Data Compression Algorithm - May 10th, 1994 (SRC-RR-124).pdf",
+    "to": "data/noisy_data/a_block_sorting_lossless_data_compression_algorithm_may_10th_1994_src_rr_124.pdf",
+    "sha256_before": "85a270fabbc2476a0b2704ab6016e828cb7288e69a8be84d98382c50b6330b65"
+  },
+  {
+    "from": "DATA/noisy_data/A Brief Introduction to Neural Networks (neuronalenetze-en-zeta2-2col-dkrieselcom).pdf",
+    "to": "data/noisy_data/a_brief_introduction_to_neural_networks_neuronalenetze_en_zeta2_2col_dkrieselcom.pdf",
+    "sha256_before": "3256bdeba5593398da6004a0da44002bffbd3415f9e1bac4c8377a602d764035"
+  },
+  {
+    "from": "DATA/noisy_data/A Brief Introduction to the Standard Annotation Language (SAL) - 2006.pdf",
+    "to": "data/noisy_data/a_brief_introduction_to_the_standard_annotation_language_sal_2006.pdf",
+    "sha256_before": "e477105297344ea3e672e13797c7bfd5aca0e6888b0d437bfc8996b2d2e2134b"
+  },
+  {
+    "from": "DATA/noisy_data/A Brief Tutorial on Database Queries, Data Mining, and OLAP (hamel-197-manuscript-final).pdf",
+    "to": "data/noisy_data/a_brief_tutorial_on_database_queries_data_mining_and_olap_hamel_197_manuscript_final.pdf",
+    "sha256_before": "8dd4b2b48cc3781143f4849b3c36c11a236bee7771ccd38bf30b6af2b63f42de"
+  },
+  {
+    "from": "DATA/noisy_data/A Case Study in Optimizing HTM-Enabled Dynamic Data Structures - Patricia Tries (2015).pdf",
+    "to": "data/noisy_data/a_case_study_in_optimizing_htm_enabled_dynamic_data_structures_patricia_tries_2015.pdf",
+    "sha256_before": "0dcfd7d788fa853be8274df8158570f9552c5c803e256ecab3b4f1fa32032238"
+  },
+  {
+    "from": "DATA/noisy_data/A Catalogue of Optimizing Transformations (1971-allen-catalog).pdf",
+    "to": "data/noisy_data/a_catalogue_of_optimizing_transformations_1971_allen_catalog.pdf",
+    "sha256_before": "3a0661795d608b0e409c807416edb024862abe6a5fbba0e704ebb7b13ec22d08"
+  },
+  {
+    "from": "DATA/noisy_data/A Comparison of Programming Languages in Economics (16-Jun-2014).pdf",
+    "to": "data/noisy_data/a_comparison_of_programming_languages_in_economics_16_jun_2014.pdf",
+    "sha256_before": "4f4650d3620c84e472c16125fbd592d768e1c953d3d374a86ce83bc6c0414cc1"
+  },
+  {
+    "from": "DATA/noisy_data/A Comparison of Software and Hardware Techniques for x86 Virtualization - Oct 2015 (asplos235_adams).pdf",
+    "to": "data/noisy_data/a_comparison_of_software_and_hardware_techniques_for_x86_virtualization_oct_2015_asplos235_adams.pdf",
+    "sha256_before": "bb04588c62ff4dc2a05ae48543c850dc5e329f63a5fbe4c045826b3c8a6f7a42"
+  },
+  {
+    "from": "DATA/noisy_data/A Forensic Analysis of CSG 11 Encounter with an Anomalous Aerial Vehicle.pdf",
+    "to": "data/noisy_data/a_forensic_analysis_of_csg_11_encounter_with_an_anomalous_aerial_vehicle.pdf",
+    "sha256_before": "a7ecedd97fca04f64a8b29c68017a76ac33a38a2e652dac9ebf3843c8e1c687b"
+  },
+  {
+    "from": "DATA/noisy_data/A Framework for Building Extensible C++ Class Libraries - 1993.pdf",
+    "to": "data/noisy_data/a_framework_for_building_extensible_cpp_class_libraries_1993.pdf",
+    "sha256_before": "98ce8a4fce7e4e38cc9a2ef7f047fa8a279a10fa51d598684dd74c74f230063d"
+  },
+  {
+    "from": "DATA/noisy_data/A GPU-friendly Skiplist Algorith - 2014 (GPUSkiplist).pdf",
+    "to": "data/noisy_data/a_gpu_friendly_skiplist_algorith_2014_gpuskiplist.pdf",
+    "sha256_before": "84390d087a948f2b13dc29e0eaf8a29daa07ab18157cf2f3ff00df31ed2958b8"
+  },
+  {
+    "from": "DATA/noisy_data/A History of Modern 64-bit Computing - Feb 2007 (CSEP590A).pdf",
+    "to": "data/noisy_data/a_history_of_modern_64_bit_computing_feb_2007_csep590a.pdf",
+    "sha256_before": "e18056341d854ce4ff14cca18d38b4477cb0ab118e10cd8eaf6e092e5ab5e501"
+  },
+  {
+    "from": "DATA/noisy_data/A Journey in Creating an Operating System Kernel - The 539Kernel Book (Nov 2022).html",
+    "to": "data/noisy_data/a_journey_in_creating_an_operating_system_kernel_the_539kernel_book_nov_2022.html",
+    "sha256_before": "ac3c27d6ebeaa9ed23f06f52f9a94e8911a1c8827fde054ef5c68ee065268ee2"
+  },
+  {
+    "from": "DATA/noisy_data/A Journey in Creating an Operating System Kernel - The 539Kernel Book (Nov 2022).pdf",
+    "to": "data/noisy_data/a_journey_in_creating_an_operating_system_kernel_the_539kernel_book_nov_2022.pdf",
+    "sha256_before": "1619250c614d12e9c0d0f3c2fe8a68d76e941807e3d6bf898ee6eca7bde72408"
+  },
+  {
+    "from": "DATA/noisy_data/A Journey in Creating an Operating System Kernel - The 539Kernel Book (Nov 2022).txt",
+    "to": "data/noisy_data/a_journey_in_creating_an_operating_system_kernel_the_539kernel_book_nov_2022.txt",
+    "sha256_before": "6d0f1a1f75d68f4ab08695ff29fb1d05f32e3eb0d93982949a9630a22794e7e0"
+  },
+  {
+    "from": "DATA/noisy_data/A Little Journey Inside Windows Memory.pdf",
+    "to": "data/noisy_data/a_little_journey_inside_windows_memory.pdf",
+    "sha256_before": "a1972a396d135f403633b14ae0d0f02f92806b1e29b2f2ada052221a4b89ec7b"
+  },
+  {
+    "from": "DATA/noisy_data/A Locality-Sensitive Hash for Real Vectors (10.1.1.215.7690).pdf",
+    "to": "data/noisy_data/a_locality_sensitive_hash_for_real_vectors_10_1_1_215_7690.pdf",
+    "sha256_before": "d741ecc719d7877cadd7acc129715f69910478759d0111aa2facc448dc7cae1e"
+  },
+  {
+    "from": "DATA/noisy_data/A Lock-Free Wait-Free Hash Table - Slides (070221_LockFreeHash).pdf",
+    "to": "data/noisy_data/a_lock_free_wait_free_hash_table_slides_070221_lockfreehash.pdf",
+    "sha256_before": "1c95037e8b18b29f1e8e75df34d130f92f70dbb32fa022b1c82466c5a1aebb23"
+  },
+  {
+    "from": "DATA/noisy_data/A Look at Intel's Dataplane Development Kit (2014).pdf",
+    "to": "data/noisy_data/a_look_at_intel_s_dataplane_development_kit_2014.pdf",
+    "sha256_before": "510e270f0b3f8830bcc24794f7536a9da599dc8afc629fa6d587fd57056b83d5"
+  },
+  {
+    "from": "DATA/noisy_data/A Malloc Tutorial (Feb 16, 2009).pdf",
+    "to": "data/noisy_data/a_malloc_tutorial_feb_16_2009.pdf",
+    "sha256_before": "dc7c684c25e2c984c5fdf296210de0b4ea1b75c57d1a82b7d8b271f8a2729bff"
+  },
+  {
+    "from": "DATA/noisy_data/A Mathematical Theory of Communication (1948).pdf",
+    "to": "data/noisy_data/a_mathematical_theory_of_communication_1948.pdf",
+    "sha256_before": "54af236a64cdfc2f937cf44f89698e89730acae1549e9266e479645a30bfcc69"
+  },
+  {
+    "from": "DATA/noisy_data/A Mathematical Theory of Communication (1948).pptx",
+    "to": "data/noisy_data/a_mathematical_theory_of_communication_1948.pptx",
+    "sha256_before": "0f92a7e016bd85558bda07bf835518f3a1d68b39fd2206b4bfe4d0b4f4457eb5"
+  },
+  {
+    "from": "DATA/noisy_data/A Mathematician's Lament - Paul Lockhart.pdf",
+    "to": "data/noisy_data/a_mathematician_s_lament_paul_lockhart.pdf",
+    "sha256_before": "473cc46a079cb18196fb3b9b11933b373b607d5e3f8b5e581f3147387b0f17dd"
+  },
+  {
+    "from": "DATA/noisy_data/A Method for the Construction of Minimum-Redundancy Codes - Huffman (1952).pdf",
+    "to": "data/noisy_data/a_method_for_the_construction_of_minimum_redundancy_codes_huffman_1952.pdf",
+    "sha256_before": "e15818feb9ce9874dbe44073edd85da29fee08a96bc576fe4572211784d8842e"
+  },
+  {
+    "from": "DATA/noisy_data/A NUMA API for Linux - Novell (2005).html",
+    "to": "data/noisy_data/a_numa_api_for_linux_novell_2005.html",
+    "sha256_before": "e2be87f6e28a3f4b2189fb5db3ae25730cebdf36473c862a95c916325aeb0556"
+  },
+  {
+    "from": "DATA/noisy_data/A NUMA API for Linux - Novell (2005).pdf",
+    "to": "data/noisy_data/a_numa_api_for_linux_novell_2005.pdf",
+    "sha256_before": "1e3981699b093054a76b993651039d264009b472f79a3d98a3df16dd5eea9129"
+  },
+  {
+    "from": "DATA/noisy_data/A NUMA API for Linux - Novell (2005).txt",
+    "to": "data/noisy_data/a_numa_api_for_linux_novell_2005.txt",
+    "sha256_before": "c67ae1b05c396299cc9788f73b7d0ec83326d06268746a10cfc6d97db43a402e"
+  },
+  {
+    "from": "DATA/noisy_data/A Nanopass Framework for Compiler Education.pdf",
+    "to": "data/noisy_data/a_nanopass_framework_for_compiler_education.pdf",
+    "sha256_before": "650d405211c9d9f1354c79c96861638c7b52454a4d624a9a943325eb91eda3a3"
+  },
+  {
+    "from": "DATA/noisy_data/A Neural Probabilistic Language Model (bengio03a).pdf",
+    "to": "data/noisy_data/a_neural_probabilistic_language_model_bengio03a.pdf",
+    "sha256_before": "0bddf9a608d62da449a6413d86cbf6e8b206212595efe0e0a14da0d79d5f4976"
+  },
+  {
+    "from": "DATA/noisy_data/A New Algorithm for Data Compression (1994).html",
+    "to": "data/noisy_data/a_new_algorithm_for_data_compression_1994.html",
+    "sha256_before": "ac3c27d6ebeaa9ed23f06f52f9a94e8911a1c8827fde054ef5c68ee065268ee2"
+  },
+  {
+    "from": "DATA/noisy_data/A New Algorithm for Data Compression (1994).pdf",
+    "to": "data/noisy_data/a_new_algorithm_for_data_compression_1994.pdf",
+    "sha256_before": "5a6d9907e28c0dccf63c5ef136df08f915562d8a955e962aae625f0d6a7158fb"
+  },
+  {
+    "from": "DATA/noisy_data/A New Basis for Shifters in General-Purpose Processors for Existing and Advanced Bit Manipulations - 2009 (IEEE_TC09_NewBasisForShifters).pdf",
+    "to": "data/noisy_data/a_new_basis_for_shifters_in_general_purpose_processors_for_existing_and_advanced_bit_manipulations_2009_ieee_tc09_newbasisforshifters.pdf",
+    "sha256_before": "e20f314dae5e3562274cf2abf748310220380f52bb42a95deadb01b896f14327"
+  },
+  {
+    "from": "DATA/noisy_data/A Novel Hybrid Quicksort Algorithm Vectorized using AVX-512 on Intel Skylake (1704.08579).pdf",
+    "to": "data/noisy_data/a_novel_hybrid_quicksort_algorithm_vectorized_using_avx_512_on_intel_skylake_1704_08579.pdf",
+    "sha256_before": "eacc8b10463935c6e385dd3f90205e320694ca44b36b044449d18358446f7d79"
+  },
+  {
+    "from": "DATA/noisy_data/A Novel Hybrid Quicksort Algorithm Vectorized using AVX-512 on Intel Skylake - 2017 (Paper_44-A_Novel_Hybrid_Quicksort_Algorithm_Vectorized).pdf",
+    "to": "data/noisy_data/a_novel_hybrid_quicksort_algorithm_vectorized_using_avx_512_on_intel_skylake_2017_paper_44_a_novel_hybrid_quicksort_algorithm_vectorized.pdf",
+    "sha256_before": "989d4f25c38efbf3a4d0c4c14cfd27c4bf736d4c01eba6ca66e135df11ba896c"
+  },
+  {
+    "from": "DATA/noisy_data/A Parallel Page Cache- IOPS and Caching for Multicore Systems.pdf",
+    "to": "data/noisy_data/a_parallel_page_cache_iops_and_caching_for_multicore_systems.pdf",
+    "sha256_before": "e65b3f18d1db06e1d08bd07a5b0b4c47a50a9950a7b8a9b880e214c8d6cbc69d"
+  },
+  {
+    "from": "DATA/noisy_data/A Pattern Language - Alexander.pdf",
+    "to": "data/noisy_data/a_pattern_language_alexander.pdf",
+    "sha256_before": "f779485c09a0b9707e003cacd8c2fea76f3d9e419dd044508b426d7a5c241857"
+  },
+  {
+    "from": "DATA/noisy_data/A Pattern Language - Alexander.txt",
+    "to": "data/noisy_data/a_pattern_language_alexander.txt",
+    "sha256_before": "e9e3fbedffff4f91e104a60530759e3f86f701b1afc38a7b34ce291b9666be06"
+  },
+  {
+    "from": "DATA/noisy_data/A PlusCal User's Manual - C-Syntax Version 1.8 (31 Aug 2018).pdf",
+    "to": "data/noisy_data/a_pluscal_user_s_manual_c_syntax_version_1_8_31_aug_2018.pdf",
+    "sha256_before": "99bf4cd721c865a5cc01a6cdddbbc100f50e998efc427f0826063184320d4989"
+  },
+  {
+    "from": "DATA/noisy_data/A Practical Guide to Support Vector Classification.pdf",
+    "to": "data/noisy_data/a_practical_guide_to_support_vector_classification.pdf",
+    "sha256_before": "01456b09d31e14b8c2fcc9d7279c8016b271e94ebaea9c8440893ae0fee3b033"
+  },
+  {
+    "from": "DATA/noisy_data/A Practical Minimal Perfect Hashing Method (2005).pdf",
+    "to": "data/noisy_data/a_practical_minimal_perfect_hashing_method_2005.pdf",
+    "sha256_before": "16d0063f4cba7b57913edee1eb6193f77a4b04a86dc84953fd68366271fd2880"
+  },
+  {
+    "from": "DATA/noisy_data/A Primer on Memory Consistency and Cache Coherence (10.1.1.225.9278).pdf",
+    "to": "data/noisy_data/a_primer_on_memory_consistency_and_cache_coherence_10_1_1_225_9278.pdf",
+    "sha256_before": "0525451492f45b6c245af74e93c9dfe7d0dced1f42baaf4d99b7b9bfc1637d77"
+  },
+  {
+    "from": "DATA/noisy_data/A Primer on Memory Consistency and Cache Coherence - 2nd Edition.pdf",
+    "to": "data/noisy_data/a_primer_on_memory_consistency_and_cache_coherence_2nd_edition.pdf",
+    "sha256_before": "46a2e25f17c101ce5dadf29bd701c8b4bc83d7adde3e07aebf44d21801ddbf31"
+  },
+  {
+    "from": "DATA/noisy_data/A Probabilistic Theory of Deep Learning (1504.00641v1).pdf",
+    "to": "data/noisy_data/a_probabilistic_theory_of_deep_learning_1504_00641v1.pdf",
+    "sha256_before": "7d1e7448096d6397a86ff9b7d527e33dfc76cd098f93ad2fe7cee0688ad491df"
+  },
+  {
+    "from": "DATA/noisy_data/A Probabilistic Theory of Deep Learning.pptx",
+    "to": "data/noisy_data/a_probabilistic_theory_of_deep_learning.pptx",
+    "sha256_before": "288f2f34ed3d519eeb834eddf99513126e66fca8943e0fd1b0dd73a8e1b4ab40"
+  },
+  {
+    "from": "DATA/noisy_data/A Proposal for Hardware Assisted Arithmetic Overflow Detection - 2010 - Slides (Mihocka-Troeger-CGO-WISH-2010_final).docx",
+    "to": "data/noisy_data/a_proposal_for_hardware_assisted_arithmetic_overflow_detection_2010_slides_mihocka_troeger_cgo_wish_2010_final.docx",
+    "sha256_before": "2485e4cb032ba94cf9a605cd862d7e9256fae2a98e63594f466589d0ff1320d6"
+  },
+  {
+    "from": "DATA/noisy_data/A Proposal for Hardware Assisted Arithmetic Overflow Detection - 2010 - Slides (Mihocka-Troeger-CGO-WISH-2010_final).pdf",
+    "to": "data/noisy_data/a_proposal_for_hardware_assisted_arithmetic_overflow_detection_2010_slides_mihocka_troeger_cgo_wish_2010_final.pdf",
+    "sha256_before": "365cde835952336618e03a8d0422ef14e804851205816e9e8ab299027c0676a5"
+  },
+  {
+    "from": "DATA/noisy_data/A Proposal for Hardware Assisted Arithmetic Overflow Detection for Array and Bitfield Operations (LazyOverflowDetect_Final).pdf",
+    "to": "data/noisy_data/a_proposal_for_hardware_assisted_arithmetic_overflow_detection_for_array_and_bitfield_operations_lazyoverflowdetect_final.pdf",
+    "sha256_before": "adc3929c35a83cf6e96f3108e038ec74263e4a3ae1ba0a06b66fbf9d3ab70300"
+  },
+  {
+    "from": "DATA/noisy_data/A Quick Guide To LaTeX.pdf",
+    "to": "data/noisy_data/a_quick_guide_to_latex.pdf",
+    "sha256_before": "a7f4b42dc2d6a2f29f57e6df4a965e4f336b56ee3a427cdf167ca30b6d2ac573"
+  },
+  {
+    "from": "DATA/noisy_data/A Relational Model of Data for Large Shared Data Banks - E.F. Codd (1970).pdf",
+    "to": "data/noisy_data/a_relational_model_of_data_for_large_shared_data_banks_e_f_codd_1970.pdf",
+    "sha256_before": "fa2579f427a4da68466ef159a3ae0c3c1fe4eafec60f73c9f2f40378a65d8ef9"
+  },
+  {
+    "from": "DATA/noisy_data/A Theoretical Framework for Back-Propagation (2001).pdf",
+    "to": "data/noisy_data/a_theoretical_framework_for_back_propagation_2001.pdf",
+    "sha256_before": "441b0e44351d76ab5c3d73cc2bb5c57e76fff7f4b1886c3d151b02aa67cea9cd"
+  },
+  {
+    "from": "DATA/noisy_data/A Tool for the Symbolic Execution of Linux Binaries - PySymemu (Slides).pdf",
+    "to": "data/noisy_data/a_tool_for_the_symbolic_execution_of_linux_binaries_pysymemu_slides.pdf",
+    "sha256_before": "c186a24bde4aa4d2525f0c6c7a6f1bcc7ad7e66aac4d8f9975ae946f59644cf6"
+  },
+  {
+    "from": "DATA/noisy_data/A Trip Through The Graphics Pipeline - All (2011).docx",
+    "to": "data/noisy_data/a_trip_through_the_graphics_pipeline_all_2011.docx",
+    "sha256_before": "b29dcb50bd250b4b5e78d6566dac3fd7b7bb781282b7c44c54568e4e89853e5d"
+  },
+  {
+    "from": "DATA/noisy_data/README.txt",
+    "to": "data/noisy_data/corpus_notes.txt",
+    "sha256_before": "81f348ad92774d6743d7e8fbcce8856284b613a1d7b24e990dbb340138ae0fdb"
+  },
+  {
+    "from": "DATA/true_data/architecture.pptx",
+    "to": "data/true_data/kubernetes_architecture.pptx",
+    "sha256_before": "f78717f305cf5e3998c01f54e4255781f1e8503515161f0c9c5ead152d26fa93"
+  },
+  {
+    "from": "DATA/true_data/cronjobs.docx",
+    "to": "data/true_data/kubernetes_cronjobs.docx",
+    "sha256_before": "21a1ac5bbd78b29632c46d1f94a421367c9b7e7f06586373f017b334acb6b1a9"
+  },
+  {
+    "from": "DATA/true_data/job_management.html",
+    "to": "data/true_data/databricks_job_management.html",
+    "sha256_before": "c638a0bc3b424362d4429749c0cdb16a885597096eba408119d2b75c8f5076dd"
+  },
+  {
+    "from": "DATA/true_data/monitor_job.docx",
+    "to": "data/true_data/kubernetes_job_monitoring.docx",
+    "sha256_before": "f801ecc0a9de373aada2c048226fddb724031024b985e1ba098146d124fccb39"
+  },
+  {
+    "from": "DATA/true_data/parallel_work_queue.txt",
+    "to": "data/true_data/kubernetes_parallel_work_queue.txt",
+    "sha256_before": "1d2934392a49b132d5f3bb44eee179464f1ee1bb1ac91771a3af0ffd962bff5b"
+  },
+  {
+    "from": "DATA/true_data/pods_autoscale.html",
+    "to": "data/true_data/kubernetes_pod_autoscaling.html",
+    "sha256_before": "06c1b5057bb8a1a76e853e9989c2b58ddeb9cf5dd90e8e49957043a9531885bd"
+  },
+  {
+    "from": "DOCS/01_SYSTEM_OVERVIEW.md",
+    "to": "docs/system_overview.md",
+    "sha256_before": "129ec51de500c9e6c04c13cb0c4ce1d144d0443ab66426fb2581367add754567"
+  },
+  {
+    "from": "DOCS/02_INGESTION_ENGINE.md",
+    "to": "docs/document_ingestion.md",
+    "sha256_before": "c63d368d8f3b2c74cadfca8c5b87da7d0525f926bc0731bb011cfc26a526e234"
+  },
+  {
+    "from": "DOCS/03_NODE_INTELLIGENCE.md",
+    "to": "docs/rag_agent_nodes.md",
+    "sha256_before": "3bd0ed6fafea0c5dfb7cf4fcdaa96c596f04a7003907fcd29520b2bc0bf22816"
+  },
+  {
+    "from": "DOCS/04_TRACING_AND_OBSERVABILITY.md",
+    "to": "docs/observability.md",
+    "sha256_before": "3c47eb800df6136f600f9d3c8fb1a52ddc7cb462e4143274d0e738acc26005ae"
+  },
+  {
+    "from": "DOCS/05_ENVIRONMENT_VARIABLES.md",
+    "to": "docs/environment_variables.md",
+    "sha256_before": "b35d5603b6d732a613d7880b577bfd7a8cb1b0f41dc7e0c4cf786396aba67313"
+  },
+  {
+    "from": "DOCS/06_KNOWN_GOTCHAS.md",
+    "to": "docs/troubleshooting.md",
+    "sha256_before": "9c2c39896fbe29f8da5adf1e8a1a367f0b5ce6356b5fdaa769602cdd689664a9"
+  },
+  {
+    "from": "DOCS/07_FLASHRANK_RERANKING.md",
+    "to": "docs/document_reranking.md",
+    "sha256_before": "a8439a9d3af501c126a7c183784e37341468c03c6a13ecda28ea3678c0116e97"
+  },
+  {
+    "from": "DOCS/08_GUARDRAILS.md",
+    "to": "docs/rag_guardrails.md",
+    "sha256_before": "ca456cc0811569287da4160ca959a5f00f524a7d9382a9c6508b75dc43155454"
+  },
+  {
+    "from": "DOCS/09_LLM_GATEWAY.md",
+    "to": "docs/rag_llm_gateway.md",
+    "sha256_before": "41636a0199c7596e4faf45d421390edd3f7587ebe151d74563bb47cd65f0ad5e"
+  },
+  {
+    "from": "DOCS/10_EVALS.md",
+    "to": "docs/rag_evaluation.md",
+    "sha256_before": "f87d13728960a1c7e38394e8bb483e5e733053522285aeeff2af23fe368c7098"
+  },
+  {
+    "from": "DOCS/11_EVALS_PIPELINE.md",
+    "to": "docs/rag_evaluation_pipeline.md",
+    "sha256_before": "9eae81533c88ecd30b3f014301ec3c3b2aed2ae4679b8928f444753dcba09c84"
+  },
+  {
+    "from": "DOCS/GATEWAY GUARDRAIL EVAL/LLM Evaluations Guide.pdf",
+    "to": "docs/reference_guides/rag_evaluation_guide.pdf",
+    "sha256_before": "8678518855acb09f2daa91fb66a4ea6f284951e07fded2afcf7d2fe2363507cb"
+  },
+  {
+    "from": "DOCS/GATEWAY GUARDRAIL EVAL/llm_gateways_guide.md.pdf",
+    "to": "docs/reference_guides/rag_llm_gateway_guide.pdf",
+    "sha256_before": "0a36ec96e65bf70d534a4ea866e15ff29956803a77610b54fdbde8515e656e5d"
+  },
+  {
+    "from": "DOCS/GATEWAY GUARDRAIL EVAL/llm_guardrails_guide.md.pdf",
+    "to": "docs/reference_guides/rag_guardrails_guide.pdf",
+    "sha256_before": "c273d36d292263e5cea38aa0cc866983596dd9ce258bd20bf05db4e1793a7ca8"
+  },
+  {
+    "from": "app/__init__.py",
+    "to": "rag/__init__.py",
+    "sha256_before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "from": "app/agents/graph.py",
+    "to": "rag/agents/workflow.py",
+    "sha256_before": "58ab63ebf44bb2be51b3d86eec52799f756a51fc53696c033fdabe1ead3069c7"
+  },
+  {
+    "from": "app/agents/nodes/planner.py",
+    "to": "rag/agents/nodes/query_planner.py",
+    "sha256_before": "8e5820f7e600475dd6ea20715e098f874d3b2137d84999117a6df0d1bf211840"
+  },
+  {
+    "from": "app/agents/nodes/responder.py",
+    "to": "rag/agents/nodes/answer_generator.py",
+    "sha256_before": "44bcee1a4f9974666897264322135455bfecc0b28c380b7e020e50b7735c9f46"
+  },
+  {
+    "from": "app/agents/nodes/retriever.py",
+    "to": "rag/agents/nodes/document_retriever.py",
+    "sha256_before": "4e449cb12cea942af67f772bcf673261636bf07589961e6f41b561d7a091a6b2"
+  },
+  {
+    "from": "app/agents/state.py",
+    "to": "rag/agents/conversation_state.py",
+    "sha256_before": "8addcedc1415ee16416d34b2be78957083a19b6ea82a1660399d9b03f89233b2"
+  },
+  {
+    "from": "app/config.py",
+    "to": "rag/settings.py",
+    "sha256_before": "9a8b353bc7137ecfbda3dea3ff3d7269a8b4ad52274ebfbb6f2393d0c4a3b2c3"
+  },
+  {
+    "from": "app/gateway/__init__.py",
+    "to": "rag/gateway/__init__.py",
+    "sha256_before": "85c629ca3b11ef97764ad48143b64f31e25090e591573cab678a75859193274e"
+  },
+  {
+    "from": "app/gateway/client.py",
+    "to": "rag/gateway/llm_gateway.py",
+    "sha256_before": "ffff334eec6e2e5bcc45b0dcae8560076dda8a267fa1e82cb91828b5937d7066"
+  },
+  {
+    "from": "app/guardrails/__init__.py",
+    "to": "rag/guardrails/__init__.py",
+    "sha256_before": "de337e7433e999f343fbe5813337fb77afc31903a1293330ceed4ad6fb8488d9"
+  },
+  {
+    "from": "app/guardrails/colang_rules.py",
+    "to": "rag/guardrails/safety_rules.py",
+    "sha256_before": "5664f9c620ce1771093c100a8e9098e4da72e4620206741aa06baaf4de04d190"
+  },
+  {
+    "from": "app/guardrails/rails.py",
+    "to": "rag/guardrails/safety.py",
+    "sha256_before": "fbadcf8f3d2a80777ad6d2411b5bb17c64b5c4e7e841ca9c33fc6147b0d47937"
+  },
+  {
+    "from": "app/ingestion/chunking/__init__.py",
+    "to": "rag/ingestion/chunking/__init__.py",
+    "sha256_before": "7bec08f78577dd7f0c0ef4e1ff954a8e984b61b549da6690daaf3a01677cff38"
+  },
+  {
+    "from": "app/ingestion/chunking/splitter.py",
+    "to": "rag/ingestion/chunking/text_splitter.py",
+    "sha256_before": "a416c6da7cd2fdd3d0002efb4fc5591b029567b18a1d6a77c6a685a192ce317c"
+  },
+  {
+    "from": "app/ingestion/loaders/__init__.py",
+    "to": "rag/ingestion/loaders/__init__.py",
+    "sha256_before": "cb79169d839b14352077cd5343f5cbb86e1e590f56eda941b8882b5e871b3336"
+  },
+  {
+    "from": "app/ingestion/loaders/html.py",
+    "to": "rag/ingestion/loaders/html_loader.py",
+    "sha256_before": "df943c796d4e74f9ff9f1d63c6e341d7c43dfa389ab840f528812683af749568"
+  },
+  {
+    "from": "app/ingestion/loaders/office.py",
+    "to": "rag/ingestion/loaders/office_loader.py",
+    "sha256_before": "62020552d9555efa09b87b0bfc92fc5f64af003677e6d092c36ba599aa0a2212"
+  },
+  {
+    "from": "app/ingestion/loaders/pdf.py",
+    "to": "rag/ingestion/loaders/pdf_loader.py",
+    "sha256_before": "d52b63e8769ae395891070e54729b69b4d1acedfc4577f3e97671b17ee70a842"
+  },
+  {
+    "from": "app/ingestion/loaders/text.py",
+    "to": "rag/ingestion/loaders/text_loader.py",
+    "sha256_before": "329070672b88618526992865243a7f02398f0e95760e48f9b1a3f88c79b53af4"
+  },
+  {
+    "from": "app/ingestion/processor.py",
+    "to": "rag/ingestion/document_processor.py",
+    "sha256_before": "e8cc3a1a93bc7e343ee2a14dc97a1d38b3823e1cce2df5091b548a6ecf39a159"
+  },
+  {
+    "from": "app/main.py",
+    "to": "rag/api.py",
+    "sha256_before": "f8f74be419591f9e12cbdd7fb721eac09286596dec9487045695ac24a200993e"
+  },
+  {
+    "from": "app/services/__init__.py",
+    "to": "rag/services/__init__.py",
+    "sha256_before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "from": "app/services/retrieval/embedding.py",
+    "to": "rag/services/retrieval/embedding_service.py",
+    "sha256_before": "ed02d9f7bf74295db1c287b86537e4a1905d9235897bbc4e21998b8ab5946503"
+  },
+  {
+    "from": "app/services/retrieval/qdrant_service.py",
+    "to": "rag/services/retrieval/vector_store.py",
+    "sha256_before": "e26964fc2a86833e073e8251db15f8cecd1504f0e683e58aca1e30005d3ed289"
+  },
+  {
+    "from": "app/services/retrieval/ranking_service.py",
+    "to": "rag/services/retrieval/reranker.py",
+    "sha256_before": "e6ad3c5a3a9c6a2a037a11b1bea848baa98660cd28d8e35f6f8c60e8564dab53"
+  },
+  {
+    "from": "evals/__init__.py",
+    "to": "evaluation/__init__.py",
+    "sha256_before": "78afeee105102170e5cde1dd85f755f62cd8ae0ab0b13f9b92d181ee9cf7eaef"
+  },
+  {
+    "from": "evals/app.py",
+    "to": "evaluation/rag_dashboard.py",
+    "sha256_before": "be12253a4264c30e175ba8b03fe2c1bda9407424767a56e69ac44352716064c2"
+  },
+  {
+    "from": "evals/data_parser.py",
+    "to": "evaluation/corpus_parser.py",
+    "sha256_before": "3e2139eb2cfa77eb63edf2ae54bf9eb55c23dc1d8fa56c708cdd227740f56ac2"
+  },
+  {
+    "from": "evals/golden_dataset.json",
+    "to": "evaluation/rag_golden_dataset.json",
+    "sha256_before": "4a9d31e1f9bf12e842dbadd805024e05747dd5e54bc7956152ed235101d66edd"
+  },
+  {
+    "from": "evals/guardrails_eval.py",
+    "to": "evaluation/guardrails_evaluation.py",
+    "sha256_before": "057628ab880a2256255d4fe5e30554c44ebe9cd96f50bea17ade826f990cba6c"
+  },
+  {
+    "from": "evals/metrics.py",
+    "to": "evaluation/rag_metrics.py",
+    "sha256_before": "06422165e1b80f14441fb9063a7a750666d406c92ab61a73fa56cd036e82427b"
+  },
+  {
+    "from": "evals/og_golden_dataset.json",
+    "to": "evaluation/rag_golden_dataset_reference.json",
+    "sha256_before": "4a9d31e1f9bf12e842dbadd805024e05747dd5e54bc7956152ed235101d66edd"
+  },
+  {
+    "from": "evals/pipeline.py",
+    "to": "evaluation/rag_pipeline.py",
+    "sha256_before": "a18d1c70594d32155ef666167c32bc7067c4d79d6b262926909d70a61dfe1712"
+  },
+  {
+    "from": "notebooks/01_guardrails.ipynb",
+    "to": "notebooks/rag_guardrails.ipynb",
+    "sha256_before": "4a044f44f5cde838bb7b38489a986a350184fef7186b0c9f48e9bc18b75647aa"
+  },
+  {
+    "from": "notebooks/02_llm_gateway.ipynb",
+    "to": "notebooks/rag_llm_gateway.ipynb",
+    "sha256_before": "e4e43cba7f5abf1ca23cf85c0db36814bd9d39c12f74a3c40794b04027a17d92"
+  },
+  {
+    "from": "notebooks/02_llm_gateway_copy2.ipynb",
+    "to": "notebooks/rag_gateway_routing.ipynb",
+    "sha256_before": "f09108ac405e8cbbd07c03aaab8597c1935831531d5870f764776da9db5f6947"
+  },
+  {
+    "from": "notebooks/03_evals.ipynb",
+    "to": "notebooks/rag_evaluation.ipynb",
+    "sha256_before": "281e22a4fadfa21b817e605888e18bf77a517af73ecf3805b4c6432b17e82185"
+  },
+  {
+    "from": "processed_data/noisy/100G Networking Technology Overview - Slides - Toronto (August 2016).pdf.json",
+    "to": "processed_documents/noisy/100g_networking_technology_overview_slides_toronto_august_2016.pdf.json",
+    "sha256_before": "7cd03d6273e3997d8ba0d43aa81c271e908f5e40ad8aeff39926a7684a04cef6"
+  },
+  {
+    "from": "processed_data/noisy/37 Million Compilations - Investigating Novice Programming Mistakes in Large-Scale Student Data (fp1187-altadmri).pdf.json",
+    "to": "processed_documents/noisy/37_million_compilations_investigating_novice_programming_mistakes_in_large_scale_student_data_fp1187_altadmri.pdf.json",
+    "sha256_before": "5366537687a13ef640e6c45e32372828d59d3c7466244c63302afe53e38b62c9"
+  },
+  {
+    "from": "processed_data/noisy/5-Level Paging and 5-Level EPT - Intel - Revision 1.0 (December, 2016).pdf.json",
+    "to": "processed_documents/noisy/5_level_paging_and_5_level_ept_intel_revision_1_0_december_2016.pdf.json",
+    "sha256_before": "89812d7e7efdbc6ee27c34d6fa9a0a1434bd4cda29c80b5187c7457d3faa9b05"
+  },
+  {
+    "from": "processed_data/noisy/5-Level Paging and 5-Level EPT - Intel - Revision 1.1 (May, 2017).pdf.json",
+    "to": "processed_documents/noisy/5_level_paging_and_5_level_ept_intel_revision_1_1_may_2017.pdf.json",
+    "sha256_before": "fa460e7a386e95d0b31188251bb4a9036438b8d7a722162f1e6ce9d430919e94"
+  },
+  {
+    "from": "processed_data/noisy/README.txt.json",
+    "to": "processed_documents/noisy/corpus_notes.txt.json",
+    "sha256_before": "66f640ae2c595417f7d9579bf7d170a41a8ba89b666ba62e0d01cf8ed89b3514"
+  },
+  {
+    "from": "processed_data/true/architecture.pptx.json",
+    "to": "processed_documents/true/kubernetes_architecture.pptx.json",
+    "sha256_before": "37e224336b29241c92fa0de1c0cf743d628b4763ce0708d2cff1ce351008e128"
+  },
+  {
+    "from": "processed_data/true/cronjobs.docx.json",
+    "to": "processed_documents/true/kubernetes_cronjobs.docx.json",
+    "sha256_before": "a10e0058fa3db0996035e044a1844410a971da5ddcfcb9f043e0b39331920de7"
+  },
+  {
+    "from": "processed_data/true/job_management.html.json",
+    "to": "processed_documents/true/databricks_job_management.html.json",
+    "sha256_before": "2e4a612495546f6d05336d5239a06361e20ad60d3fe63c875367d60be5eebd09"
+  },
+  {
+    "from": "processed_data/true/monitor_job.docx.json",
+    "to": "processed_documents/true/kubernetes_job_monitoring.docx.json",
+    "sha256_before": "0ea92e9fe15425896fcc7e4aed0e3e94510a8dd06d853674334961f363fd61e1"
+  },
+  {
+    "from": "processed_data/true/parallel_work_queue.txt.json",
+    "to": "processed_documents/true/kubernetes_parallel_work_queue.txt.json",
+    "sha256_before": "45fe4518ee336b2d15dd46c3e1bcedd543cdc3157b8e89a46cff51b77a0436bf"
+  },
+  {
+    "from": "processed_data/true/pods_autoscale.html.json",
+    "to": "processed_documents/true/kubernetes_pod_autoscaling.html.json",
+    "sha256_before": "9cc070849f1b7496581537a372470fe9bea4f4dcca5c961ae5e8a8bc51e32999"
+  },
+  {
+    "from": "requirements-prod.txt",
+    "to": "requirements-api.txt",
+    "sha256_before": "9675fbca37ece804ecf993d769cb5ca4b6b5cb7e612e2e57d43e29fa4b21243d"
+  },
+  {
+    "from": "ui/app.py",
+    "to": "ui/rag_chat.py",
+    "sha256_before": "48237ed8f92a40f8fb16fdc11e5a724cb62fea5fbfa6ac6e74b5d0cb9b67158f"
+  },
+  {
+    "from": "ui/st_cloud_ui.py",
+    "to": "ui/rag_chat_cloud.py",
+    "sha256_before": "85ec7a7802c580aed26e26979cea9f738fb8f1b6c86e4fa0f5b85bfd39d72c29"
+  }
+]

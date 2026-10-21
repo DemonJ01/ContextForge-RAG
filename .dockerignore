@@ -1,0 +1,54 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.installed.cfg
+build/
+dist/
+wheels/
+
+# Virtual environments (huge — never needed in image)
+venv/
+.venv/
+env/
+genv/
+rag_env/
+tenvv/
+
+# Environment & secrets
+.env
+commands.md
+
+# Git & IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Observability local state
+.logfire/
+
+# Claude Code memory
+.claude/
+
+# Source documents — parsed locally, not in the container
+data/
+
+# Eval suite — runs locally only, not in Cloud Run
+evaluation/
+
+# Legacy Streamlit scripts are optional; ui/web/ is served by FastAPI
+
+# Notebooks & docs — not needed at runtime
+notebooks/
+docs/
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+ui/*.py
+tests/

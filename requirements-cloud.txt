@@ -1,0 +1,30 @@
+# Optional cloud agent, ingestion, and vector integrations.
+-r requirements.txt
+
+requests
+numpy
+pytz
+google-generativeai
+langchain-google-genai
+qdrant-client
+flashrank
+langchain
+langgraph
+langchain-groq
+langchain-google-vertexai
+langchain-community
+langchain-openai
+pydantic>=2.0.0
+unstructured
+python-pptx
+python-docx
+pypdf
+beautifulsoup4
+pdfplumber
+langsmith
+logfire[fastapi,requests]
+loguru
+nemoguardrails
+langchain-nvidia-ai-endpoints
+portkey-ai
+sentence-transformers
