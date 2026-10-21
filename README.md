@@ -2,8 +2,6 @@
 
 A document workspace with a connected chat interface, searchable library, and inspectable source evidence. FastAPI serves the frontend and backend together, so one process runs the application.
 
-Repository: [DemonJ01/ContextForge-RAG](https://github.com/DemonJ01/ContextForge-RAG). GitHub Actions runs the unit suite on Python 3.11 and 3.12 and checks the live workspace in Chromium on every push and pull request.
-
 The default **local mode works without API keys**. It ranks the included document text with BM25 and returns cited source excerpts. It does not run a language model. The optional cloud mode uses the original LangGraph, Groq/Portkey, Gemini, Qdrant, FlashRank, and NeMo pipeline.
 
 ## Start
