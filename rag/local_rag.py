@@ -20,7 +20,7 @@ a an and are as at be been being by can could did do does for from had has
 have how i if in into is it its me my of on or our please should show some
 that the their them then there these they this those to use using was we
 were what when where which who why will with would you your explain tell
-about describe compare comparison difference differences versus vs between
+about describe compare comparison difference differences differ differs different versus vs between
 example examples give get need want find help work works
 main specific detail details valid one two three four five six seven eight
 nine ten summarize summary list provide supported supports

@@ -66,6 +66,22 @@ class LocalRAGTests(unittest.TestCase):
             self.assertEqual(citation["filename"], document["filename"])
             self.assertGreater(citation["score"], 0)
 
+    def test_comparison_intent_variants_retrieve_both_autoscaling_definitions(self):
+        for query in (
+            "What is horizontal pod autoscaling?\n"
+            "How does it differ from vertical pod autoscaling?",
+            "Explain how horizontal pod autoscaling differs from vertical pod autoscaling",
+            "How are HPA and VPA different?",
+        ):
+            with self.subTest(query=query):
+                result = self.rag.query(query)
+                self.assertEqual(result["status"], "complete")
+                self.assertEqual(result["citations"][0]["filename"],
+                                 "kubernetes_pod_autoscaling.html")
+                evidence = "\n".join(result["sources"])
+                self.assertIn("number of pods", evidence)
+                self.assertIn("adjusts the CPU and memory resource requests and limits", evidence)
+
     def test_no_evidence_returns_no_answer_or_citations(self):
         for query in (
             "Explain quantum entanglement", "What is today's weather?",
@@ -74,6 +90,7 @@ class LocalRAGTests(unittest.TestCase):
             "How do Kubernetes jobs teleport pods?",
             "Which Kubernetes Job restart policy prevents quantum entanglement?",
             "What is the Kubernetes default password?",
+            "What is horizontal pod autoscaling?\nHow does it differ from telepathy?",
         ):
             with self.subTest(query=query):
                 result = self.rag.query(query, scope="all")
