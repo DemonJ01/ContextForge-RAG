@@ -1,46 +1,26 @@
-# 🕵️ Tracing & Observability
+# Observability
 
-In an Agentic system, "Why did the AI say that?" is the most important question. We use a dual-tracing strategy to provide total transparency into the agent's thought process.
+The optional cloud pipeline uses Logfire logging and spans, with LangSmith tracing for its LangChain calls. These records help inspect retrieval, provider errors, and model requests. Local mode runs without either service.
 
----
+## Logfire
 
-## 🔬 The Observability Stack
+Logfire calls surround document parsing, embedding, vector search, reranking, and cloud generation. The reranker logs elapsed time and its leading score; ingestion logs the processed filename and chunk count.
 
-### 1. Pydantic Logfire (System Tracing)
-Logfire provides distributed tracing for the entire infrastructure. It tracks:
-*   **API Latency**: How long the backend takes to respond.
-*   **Parsing Steps**: Exactly which parser (pypdf, BS4, python-docx) was used for which file.
-*   **Database Queries**: Time taken to retrieve results from Qdrant.
+`RAGRuntime.cloud_components()` configures Logfire before importing the cloud workflow. With `LOGFIRE_TOKEN`, it uses the configured account. Without a token, the runtime calls `logfire.configure(send_to_logfire=False)`. Ingestion is a separate entry point with its own Logfire configuration.
 
-### 2. LangSmith (LLM Orchestration)
-LangSmith is specialized for the "Agentic" part of the project. It records:
-*   **Graph State Transitions**: How the state changed between the Planner and the Retriever.
-*   **Prompt Versions**: The exact system instructions sent to Groq.
-*   **Token Usage**: Monitoring the cost and efficiency of LLM calls.
-*   **Chain of Thought**: The reasoning steps the agent took before answering.
+## LangSmith
 
----
+`rag/settings.py` sets LangChain tracing environment variables from the `LANGSMITH_*` configuration. LangSmith can record the LangChain planner call, including its prompt and response, when tracing is enabled and credentials are configured.
 
-## 📊 Tracing Architecture
+The responder calls Portkey directly, so it does not follow the same LangChain tracing path. Application plan entries record workflow events; they do not expose a model's hidden chain of thought. Correlation between separate tracing services should be checked in the actual trace records rather than assumed from the browser session ID.
+
 ```mermaid
 graph TD
-    UI[Streamlit UI] -->|Trace ID| Backend[FastAPI Backend]
-    Backend -->|Span| Logfire{Logfire}
-    Backend -->|Trace| LangSmith{LangSmith}
-    Backend -->|Query| Qdrant[(Qdrant)]
-    Backend -->|Model| Groq((Groq))
-    
-    subgraph Dashboard
-        Logfire --> LView[Infrastructure View]
-        LangSmith --> AView[Agent Logic View]
-    end
+    UI[Web workspace] --> Backend[FastAPI cloud runtime]
+    Backend -->|Application spans| Logfire{Logfire}
+    Backend -->|LangChain planner| LangSmith{LangSmith}
+    Backend -->|Retrieval| Qdrant[(Qdrant)]
+    Backend -->|Generation| Portkey[Portkey / Groq]
 ```
 
----
-
-## 🛠️ How to access
-*   **Logfire**: Visit your [Logfire Project](https://logfire.pydantic.dev/).
-*   **LangSmith**: Visit your [LangSmith Project](https://smith.langchain.com/).
-
-> [!TIP]
-> All traces are linked via a common `trace_id`. If you find a bug in the UI, you can find the exact LLM call in LangSmith and the corresponding Logfire span using that ID.
+Access the configured dashboards through [Logfire](https://logfire.pydantic.dev/) and [LangSmith](https://smith.langchain.com/).

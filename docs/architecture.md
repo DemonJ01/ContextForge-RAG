@@ -1,4 +1,6 @@
-# RAG: LangGraph · Guardrails · LLM Gateway · RAGAS Evals
+# Optional cloud architecture
+
+These diagrams describe cloud mode and its optional Streamlit clients. The primary web workspace is served by FastAPI. Default local mode searches saved document text with BM25 and returns source excerpts without these cloud services.
 
 ```mermaid
 graph LR

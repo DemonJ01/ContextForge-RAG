@@ -1,52 +1,41 @@
-# 🤖 RAG: System Overview
+# System overview
 
-A RAG application using **LangGraph** for query planning, retrieval, response generation, and conversation memory. Documents are parsed locally; model calls, embeddings, and vector search use configured services.
+FastAPI serves the web workspace and API in one process. The default local runtime searches saved document text using BM25 and returns cited excerpts. It requires no model or provider credentials.
 
----
+The optional cloud runtime uses LangGraph for query planning, retrieval, response generation, and conversation memory. Parsing runs locally; embeddings, Qdrant search, and model calls use the configured services. FlashRank reranks retrieved passages on the local CPU.
 
-## 🌟 Vision
-Most RAG systems fail because they treat every query the same. Our **Agentic RAG** distinguishes between:
-1.  **Conversational Queries**: "Hi", "Who are you?", "What did I just say?"
-2.  **Technical Queries**: "How do I configure Intel SRIOV on Kubernetes?"
+## Request flow
 
-By using a **Planner-Retriever-Responder** architecture, technical queries retrieve documentation before generation while conversational interactions remain fluid and fast.
+The browser sends questions to `/query`. In local mode, the engine searches the selected document scope and returns evidence, or a no-evidence response when it cannot find a match.
 
----
+Cloud mode distinguishes conversational requests from technical queries. The planner can send greetings or conversation-history questions directly to the responder. Technical queries retrieve documentation before generation.
 
-## 🏗️ High-Level Flow
 ```mermaid
 sequenceDiagram
     participant User
-    participant UI as Streamlit UI
-    participant Agent as Agent Brain (FastAPI)
-    participant Data as Knowledge Base (Qdrant)
-
-    User->>UI: Asks Question
-    UI->>Agent: Request with thread_id
-    Agent->>Agent: Planner decides intent
-    alt Technical
-        Agent->>Data: Vector Search
-        Data-->>Agent: Raw Chunks
-        Agent->>Agent: FlashRank Local Reranking
-    else Conversational
-        Agent->>Agent: Recall Memory
+    participant UI as Web workspace
+    participant API as FastAPI
+    participant Local as Local document index
+    participant Cloud as Cloud workflow
+    User->>UI: Ask a question
+    UI->>API: POST /query
+    alt Local runtime
+        API->>Local: BM25 retrieval
+        Local-->>API: Excerpts and citations
+    else Cloud runtime
+        API->>Cloud: Plan, retrieve if needed, generate
+        Cloud-->>API: Answer and sources
     end
-    Agent->>User: Synthesized Answer + Sources
+    API-->>UI: Result
 ```
 
----
+## Project layout
 
-## 📂 Project Organization
-*   **`rag/`**: The core Python package containing the Agent, Pipelines, and Services.
-*   **`ui/`**: A premium Streamlit interface designed for source transparency.
-*   **`data/`**: The ground-truth documentation used for ingestion.
-*   **`docs/`**: This documentation suite.
-*   **[`README.md`](../README.md)**: Setup and execution commands.
+- **`rag/`**: API, runtime selection, retrieval, ingestion, and cloud workflow.
+- **`ui/web/`**: Integrated web workspace. The Streamlit scripts in `ui/` are optional clients.
+- **`data/`**: Original source documents.
+- **`processed_documents/`**: Saved extracted text searched by the local runtime.
+- **`docs/`**: Technical guides.
+- **[`README.md`](../README.md)**: Setup and execution commands.
 
----
-
-## 🚀 Quick Navigation
-1.  **Ingestion**: [document_ingestion.md](document_ingestion.md)
-2.  **Intelligence**: [rag_agent_nodes.md](rag_agent_nodes.md)
-3.  **Observability**: [observability.md](observability.md)
-4.  **Environment Variables**: [environment_variables.md](environment_variables.md)
+Related guides: [ingestion](document_ingestion.md), [cloud nodes](rag_agent_nodes.md), [observability](observability.md), and [configuration](environment_variables.md).

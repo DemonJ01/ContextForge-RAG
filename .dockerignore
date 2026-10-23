@@ -20,6 +20,11 @@ tenvv/
 
 # Environment & secrets
 .env
+.env.*
+*.pem
+*.key
+credentials*.json
+service-account*.json
 commands.md
 
 # Git & IDE
@@ -31,7 +36,7 @@ commands.md
 # Observability local state
 .logfire/
 
-# Claude Code memory
+# Local workspace state
 .claude/
 
 # Source documents — parsed locally, not in the container
@@ -40,7 +45,7 @@ data/
 # Eval suite — runs locally only, not in Cloud Run
 evaluation/
 
-# Legacy Streamlit scripts are optional; ui/web/ is served by FastAPI
+# Streamlit scripts are optional; ui/web/ is served by FastAPI
 
 # Notebooks & docs — not needed at runtime
 notebooks/

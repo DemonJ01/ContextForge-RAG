@@ -1,78 +1,44 @@
-# ⚡ FlashRank: Ultra-Fast Local Reranking
+# Document reranking
 
-This document explains the mechanism behind **FlashRank**, the semantic reranking engine used in our Retriever node to ensure high-fidelity responses without the cost of cloud-based ranking APIs.
+The optional cloud retriever uses FlashRank to reorder Qdrant candidates before answer generation. FlashRank runs locally. The default local runtime uses BM25 retrieval and does not load FlashRank.
 
----
+## Retrieval and reranking
 
-## 🔬 The Core Technology: Bi-Encoder vs. Cross-Encoder
+Qdrant compares the query embedding with stored document embeddings using cosine similarity. That search produces a candidate list without running a model over every query-document pair.
 
-In modern RAG systems, there are two main ways to compare a user query with documents:
+FlashRank then scores each candidate together with the query. This second pass can change the order when the initial vector similarity does not capture the question's wording well. It adds model execution time, so the retriever applies it to a small candidate list.
 
-### 1. The Bi-Encoder (Stage 1: Qdrant)
-*   **Mechanism**: The query and the documents are converted into vectors independently. We then calculate the distance (Cosine Similarity) between them.
-*   **Pros**: Extremely fast. You can compare 1 query against millions of documents in milliseconds.
-*   **Cons**: It is "semantically fuzzy." It doesn't understand the complex relationship between the query and the text (e.g., it might struggle with negation or technical nuances).
-
-### 2. The Cross-Encoder (Stage 2: FlashRank)
-*   **Mechanism**: The query and a document are fed into the model **together** as a single pair. The model looks at them simultaneously to calculate a relevance score.
-*   **Pros**: Highly accurate. It understands deep context, intent, and nuance.
-*   **Cons**: Computationally expensive and slow.
-
-**Our Solution**: We use a **Two-Stage Pipeline**. We use the Bi-Encoder (Qdrant) to quickly find the top 15 candidates, and then use the Cross-Encoder (FlashRank) to precisely re-score only those 15.
-
----
-
-## 🔄 FlashRank Mechanism Flow
+The retriever requests 15 candidates and retains the requested `top_k` results. The API defaults to 4 results and allows up to 8. Reference scope filters Qdrant points with `source_type=true`; full scope searches the collection without that filter.
 
 ```mermaid
 graph TD
-    Query[User Query] --> Embed[Gemini Embedding]
-    Embed --> Qdrant[(Qdrant Vector Search)]
-    Qdrant -->|Top 15 Candidates| FR_Input[FlashRank Input]
+    Query[User query] --> Embed[Configured embedding backend]
+    Embed --> Qdrant[(Qdrant vector search)]
+    Qdrant -->|15 candidates| FR_Input[Candidate passages]
     Query --> FR_Input
-    
-    subgraph "FlashRank Engine (Local CPU)"
-        FR_Input --> ONNX[ONNX Quantized Model]
-        ONNX --> Scoring[Cross-Attention Scoring]
-        Scoring --> Reorder[Semantic Re-sorting]
+    subgraph "FlashRank on local CPU"
+        FR_Input --> Model[Local ranking model]
+        Model --> Scoring[Query-passage scores]
+        Scoring --> Reorder[Score ordering]
     end
-    
-    Reorder -->|Top 5 Most Relevant| Final_Context[Final RAG Context]
-    Final_Context --> LLM((Groq LLM))
+    Reorder -->|Requested top_k| Final_Context[Retrieved context]
+    Final_Context --> LLM((Answer generator))
 ```
 
----
+## Model loading
 
-## 🛠️ Implementation Details
+`rag/services/retrieval/reranker.py` creates a FlashRank `Ranker` on first use. It first tries the cache directory `/tmp/flashrank`, then retries with FlashRank's default cache configuration if initialization fails.
 
-### The Model
-We use the `ms-marco-MiniLM-L-6-v2` model.
-*   **Quantization**: The model is quantized into the **ONNX** format, allowing it to run lightning-fast on a standard CPU without needing a GPU.
-*   **Performance**: It typically reranks 15-20 documents in **< 100ms**.
+The code does not pass a model name to `Ranker`, so the installed FlashRank version determines its default model. The first query may download model files. Later calls reuse the process's loaded ranker. Model size and latency depend on that model, the passage lengths, and the machine running it; the project does not enforce a latency target.
 
-### Lazy Initialization
-The model is roughly 30MB-50MB. To ensure the API starts up instantly, we use **Lazy Initialization**:
-1.  The API starts without loading the model.
-2.  The first time a user sends a query, the model is loaded into memory.
-3.  Subsequent queries use the warm model for near-instant results.
+## Failure behavior
 
-### Fault Tolerance
-If the FlashRank engine fails (e.g., out of memory or model corruption), the system is designed to **automatically fall back** to the original Qdrant scores. This ensures that the user always gets an answer, even if the reranking step is skipped.
+`rerank_documents(query, documents, top_n)` returns an empty list when there are no candidates. It otherwise passes dictionaries containing passage IDs and text to `RerankRequest`, then returns the highest-ranked text passages.
 
----
+If initialization or ranking raises an exception, the function logs the failure and returns the first `top_n` passages in their original Qdrant order. This fallback preserves retrieved context when reranking fails. It does not recover failed embeddings, Qdrant requests, or answer-generation calls, and it does not guarantee an answer is correct.
 
-## 🏛️ Architectural Decision: Custom Implementation vs. LangChain Native
+## Implementation
 
-LangChain provides a native `FlashrankRerank` document compressor that can be used inside a `ContextualCompressionRetriever`. While using this wrapper would slightly reduce our lines of code, we explicitly chose a **custom implementation** (`rag/services/retrieval/reranker.py`) for enterprise production readiness:
+The project calls FlashRank directly rather than using a LangChain document compressor. The helper accepts `list[str]`, which matches the retriever's text-based graph state, and contains its own logging and fallback logic.
 
-1.  **Granular Observability (Logfire)**: LangChain's wrapper abstracts the reranking process into a "black box." Our custom implementation allows us to inject precise `logfire.span()` tracking directly around the Cross-Encoder execution, logging the exact millisecond latency and top semantic scores.
-2.  **Startup Performance (Lazy Loading)**: The native LangChain wrapper initializes the heavy ONNX model upon instantiation. This would severely delay the FastAPI server boot time and potentially cause "Logfire poisoning" if imported too early. Our `_get_ranker()` function loads the model *lazily*, ensuring instant server startup.
-3.  **Bulletproof Fallback Logic**: If the native LangChain compressor fails, it crashes the entire chain and throws a 500 error. Our custom code catches memory or execution errors and gracefully falls back to the original Bi-Encoder (Qdrant) results, guaranteeing zero downtime.
-4.  **Decoupled State Management**: LangChain's retrievers force the use of heavy `Document` objects. Our LangGraph state is intentionally lightweight (using simple `List[str]`), making our custom function much cleaner to integrate without fighting LangChain's object models.
-
----
-
-## 📈 Benefits for the Enterprise
-1.  **Zero Cost**: Runs on your local CPU. No per-query Ranking API costs.
-2.  **Privacy**: Documents never leave your machine for the ranking step.
-3.  **Accuracy**: Drastically reduces "Hallucinations" by ensuring the LLM only sees the most semantically relevant data.
+Successful calls log elapsed ranking time and the leading score. These values describe that call, rather than serving as a quality guarantee or a benchmark. Reranking itself uses the local model; embedding, vector search, and answer generation still use the configured services.
