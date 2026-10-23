@@ -120,6 +120,7 @@
       : state.scope === "all" ? "Searching reference and extended library documents."
         : "Answers begin with your reference documents.";
     document.querySelectorAll(".suggestion").forEach((button) => { button.disabled = pending; });
+    document.querySelectorAll(".error-message button").forEach((button) => { button.disabled = pending; });
   }
 
   function renderHistory() {
@@ -286,12 +287,14 @@
     const messages = $("messages");
     messages.replaceChildren();
     if (conversation) {
-      conversation.messages.forEach((message) => {
+      const pendingIndex = state.pending?.conversationId === conversation.id ? state.pending.messageIndex : -1;
+      conversation.messages.forEach((message, index) => {
+        if (index === pendingIndex) messages.append(renderPending());
         if (message.role === "user") messages.append(renderUser(message));
         else if (message.role === "answer") messages.append(renderAnswer(message));
         else if (message.role === "error") messages.append(renderError(message, conversation));
       });
-      if (state.pending?.conversationId === conversation.id) messages.append(renderPending());
+      if (pendingIndex === conversation.messages.length) messages.append(renderPending());
     }
     if (state.view === "chat") $("breadcrumb-current").textContent = conversation?.title || "New conversation";
     updateControls();
@@ -313,12 +316,20 @@
       state.activeId = conversation.id;
     }
     conversation.scope = scope;
+    state.scope = scope;
+    $("scope").value = scope;
     state.conversations = [conversation, ...state.conversations.filter((item) => item.id !== conversation.id)];
-    if (retryId) conversation.messages = conversation.messages.filter((m) => m.id !== retryId);
+    let messageIndex;
+    if (retryId) {
+      messageIndex = conversation.messages.findIndex((m) => m.id === retryId);
+      if (messageIndex < 0) return;
+      conversation.messages.splice(messageIndex, 1);
+    }
     else conversation.messages.push({ id: uniqueId(), role: "user", content: trimmed });
+    messageIndex ??= conversation.messages.length;
     $("question").value = "";
     resizeComposer();
-    state.pending = { conversationId: conversation.id, question: trimmed };
+    state.pending = { conversationId: conversation.id, question: trimmed, messageIndex };
     showView("chat");
     renderConversation();
     persist();
@@ -332,7 +343,7 @@
         throw new Error("The search returned no answer. Please try again or ask a more specific question.");
       }
       const message = { ...response, id: uniqueId(), role: "answer", content: response.answer };
-      conversation.messages.push(message);
+      conversation.messages.splice(messageIndex, 0, message);
       announce("Answer ready. Review the answer and its sources below.");
       state.pending = null;
       if (state.activeId === conversation.id && state.view === "chat") {
@@ -341,7 +352,7 @@
         if (citations.length && window.matchMedia("(min-width: 1101px)").matches) openEvidence(citations);
       }
     } catch (error) {
-      conversation.messages.push({ id: uniqueId(), role: "error", content: errorText(error), question: trimmed, scope });
+      conversation.messages.splice(messageIndex, 0, { id: uniqueId(), role: "error", content: errorText(error), question: trimmed, scope });
       state.pending = null;
       if (state.activeId === conversation.id && state.view === "chat") renderConversation();
       announce("The search could not be completed. A retry option is available in the conversation.");

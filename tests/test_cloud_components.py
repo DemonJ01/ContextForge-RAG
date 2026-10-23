@@ -84,6 +84,25 @@ class CloudChunkingTests(unittest.TestCase):
             module.chunk_text("text", chunk_size=0)
 
 
+class PdfLoaderTests(unittest.TestCase):
+    def test_fallback_text_keeps_its_original_page_order(self):
+        pypdf = ModuleType("pypdf")
+        pypdf.PdfReader = Mock(return_value=SimpleNamespace(pages=[
+            SimpleNamespace(extract_text=Mock(return_value="First page")),
+            SimpleNamespace(extract_text=Mock(return_value="")),
+            SimpleNamespace(extract_text=Mock(return_value="Last page")),
+        ]))
+        plumber = ModuleType("pdfplumber")
+        plumber.open = Mock(return_value=nullcontext(SimpleNamespace(pages=[
+            SimpleNamespace(extract_text=Mock(return_value="unused")),
+            SimpleNamespace(extract_text=Mock(return_value="Middle page")),
+            SimpleNamespace(extract_text=Mock(return_value="unused")),
+        ])))
+        module = load_module("rag/ingestion/loaders/pdf_loader.py", {"pypdf": pypdf})
+        with patch.dict(sys.modules, {"pdfplumber": plumber}):
+            self.assertEqual(module.parse_pdf("example.pdf"), "First page\nMiddle page\nLast page")
+
+
 class EvaluationFailureTests(unittest.TestCase):
     def requests_stub(self):
         requests = ModuleType("requests")
@@ -264,6 +283,35 @@ class IngestionFailureTests(unittest.TestCase):
         self.client.delete_collection.assert_not_called()
         self.client.create_collection.assert_not_called()
         self.client.upsert.assert_not_called()
+
+    def test_mixed_directory_ingests_root_files_and_subdirectories(self):
+        base = Path(self.folder.name)
+        (base / "root.txt").write_text("root document")
+        reference = base / "true_data"
+        reference.mkdir()
+        (reference / "reference.txt").write_text("reference document")
+        self.client.collection_exists.return_value = True
+        self.client.get_collection.return_value = SimpleNamespace(config=SimpleNamespace(
+            params=SimpleNamespace(vectors=SimpleNamespace(size=2))
+        ))
+        with patch.object(self.module, "process_file") as process_file:
+            self.module.run_universal_ingestion(self.folder.name)
+        self.assertEqual({(call.args[1], call.args[2]) for call in process_file.call_args_list}, {
+            ("root.txt", "general"), ("reference.txt", "true"),
+        })
+
+    def test_explicit_source_type_applies_to_subdirectories(self):
+        base = Path(self.folder.name)
+        nested = base / "documents"
+        nested.mkdir()
+        (nested / "reference.txt").write_text("reference document")
+        self.client.collection_exists.return_value = True
+        self.client.get_collection.return_value = SimpleNamespace(config=SimpleNamespace(
+            params=SimpleNamespace(vectors=SimpleNamespace(size=2))
+        ))
+        with patch.object(self.module, "process_file") as process_file:
+            self.module.run_universal_ingestion(self.folder.name, explicit_source_type="true")
+        process_file.assert_called_once_with(str(nested / "reference.txt"), "reference.txt", "true")
 
 
 if __name__ == "__main__":
