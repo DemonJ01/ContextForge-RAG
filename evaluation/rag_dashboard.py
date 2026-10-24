@@ -1,35 +1,24 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# CRITICAL: logfire must be configured before all other imports
-# ─────────────────────────────────────────────────────────────────────────────
+"""Review the evaluation corpus and test the running RAG API."""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dotenv import load_dotenv
-load_dotenv()
-
-import logfire
-logfire.configure(token=os.getenv("LOGFIRE_TOKEN"), service_name="rag-evaluation")
-
-# ─────────────────────────────────────────────────────────────────────────────
 import asyncio
-import json
-import nest_asyncio
 import pandas as pd
+import requests
 import streamlit as st
-
-nest_asyncio.apply()
 
 from evaluation.rag_pipeline import run_pipeline, load_golden_dataset
 from evaluation.guardrails_evaluation import run_guardrails_eval, compute_guardrails_metrics
-from evaluation.rag_metrics import run_all_metrics
+from evaluation.telemetry import logfire
+from rag.client_config import backend_url
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Page config
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="RAG — Eval Suite",
+    page_title="ContextForge-RAG Evaluation",
     page_icon="🧪",
     layout="wide",
 )
@@ -73,13 +62,36 @@ def _color_score(val):
 def _render_metric_table(df: pd.DataFrame, metric_col: str, title: str):
     avg = df[metric_col].mean()
     st.markdown(f"**{title}** — AVG: {_badge(avg)} `{avg:.2f}` {_grade(avg)}")
-    styled = df.style.applymap(_color_score, subset=[metric_col]).format({metric_col: "{:.3f}"})
-    st.dataframe(styled, use_container_width=True, hide_index=True)
+    styled = df.style.map(_color_score, subset=[metric_col]).format({metric_col: "{:.3f}"})
+    st.dataframe(styled, width="stretch", hide_index=True)
 
 
 def _run_async(coro):
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
+
+
+def _load_metrics_runner():
+    """Judge packages and credentials are only needed for the explicit scoring step."""
+    if not os.getenv("JUDGE_GROQ", "").strip():
+        raise ValueError("Set JUDGE_GROQ to a dedicated Groq evaluation key, then restart this dashboard.")
+    try:
+        from evaluation.rag_metrics import run_all_metrics
+    except ImportError as exc:
+        raise RuntimeError(
+            "Judge metrics need optional packages. Install them with "
+            "`python -m pip install -r requirements-evaluation.txt`, then restart this dashboard. "
+            f"Missing dependency: {exc.name or str(exc)}."
+        ) from exc
+    return run_all_metrics
+
+
+def _has_responses(dataset):
+    return bool(dataset and any(sample.get("actual_response", "").strip() for sample in dataset["rag_samples"]))
+
+
+def _guardrails_mode_notice():
+    if st.session_state.get("pipeline_mode") == "local":
+        st.info("The backend is running in local mode. Cloud safety rails are inactive; these results measure local API behavior.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -103,7 +115,7 @@ golden = st.session_state.golden
 # ─────────────────────────────────────────────────────────────────────────────
 # Header
 # ─────────────────────────────────────────────────────────────────────────────
-st.title("🧪 RAG — Evaluation Suite")
+st.title("ContextForge-RAG Evaluation")
 st.caption(
     "Step 1: Review ground truth → Step 2: Run live pipeline → Step 3: Score with RAGAS"
 )
@@ -137,8 +149,8 @@ with tab1:
             "Expected Tool": s["expected_tools"][0] if s["expected_tools"] else "—",
         })
     df_golden = pd.DataFrame(rag_rows)
-    st.dataframe(df_golden, use_container_width=True, hide_index=True)
-    st.caption(f"✅ {len(rag_rows)} golden RAG samples from 5 enterprise docs")
+    st.dataframe(df_golden, width="stretch", hide_index=True)
+    st.caption(f"{len(rag_rows)} reference questions")
 
     st.divider()
 
@@ -158,8 +170,9 @@ with tab1:
             "Type": g["type"],
             "Description": g["description"],
         })
-    st.dataframe(pd.DataFrame(g_rows), use_container_width=True, hide_index=True)
-    st.caption("6 guardrails test cases: 3 adversarial (should block) + 3 legit (should pass)")
+    st.dataframe(pd.DataFrame(g_rows), width="stretch", hide_index=True)
+    blocked_count = sum(bool(sample["expected_blocked"]) for sample in golden["guardrails_samples"])
+    st.caption(f"{len(g_rows)} guardrail cases: {blocked_count} expected to block, {len(g_rows) - blocked_count} expected to pass")
 
     with st.expander("View raw rag_golden_dataset.json"):
         st.json(golden)
@@ -171,12 +184,12 @@ with tab1:
 with tab2:
     st.subheader("Live Pipeline — Collect Real Responses")
     st.markdown(
-        "Sends each golden question to your **running FastAPI app** (`localhost:8000/query`). "
+        f"Sends each reference question to your **running FastAPI app** (`{backend_url()}/query`). "
         "Captures the actual response, retrieved contexts, and tool called. "
         "Responses are truncated to 300 chars to save tokens for the RAGAS judging step."
     )
     st.info(
-        "⚠️ Make sure your FastAPI backend is running first: `uvicorn rag.api:app --reload --port 8000`",
+        "Start the backend first: `python run_rag.py`. Set `BACKEND_URL` to use a different API.",
         icon="⚠️",
     )
 
@@ -199,9 +212,19 @@ with tab2:
         st.session_state.guardrails_results = None
         st.session_state.metric_results = None
         st.session_state.pipeline_rows = []
+        st.session_state.pipeline_mode = None
         st.rerun()
 
     if run_pipeline_btn:
+        try:
+            health_response = requests.get(backend_url() + "/health", timeout=5)
+            health_response.raise_for_status()
+            backend_mode = health_response.json().get("mode", "cloud")
+            st.session_state.pipeline_mode = backend_mode
+        except (requests.RequestException, ValueError) as exc:
+            st.error(f"Cannot reach a healthy backend at {backend_url()}. Start `python run_rag.py` and retry. Details: {exc}")
+            st.stop()
+        delay_seconds = 0 if backend_mode == "local" else 10
         st.session_state.pipeline_rows = []
         progress_bar = st.progress(0, text="Starting pipeline...")
         live_table_slot = st.empty()
@@ -222,7 +245,7 @@ with tab2:
                 })
                 live_table_slot.dataframe(
                     pd.DataFrame(st.session_state.pipeline_rows),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )
                 progress_bar.progress(
@@ -231,15 +254,24 @@ with tab2:
                 )
 
         with logfire.span("🚀 Streamlit — Run Pipeline Button"):
-            enriched = run_pipeline(golden, progress_callback=pipeline_cb)
+            enriched = run_pipeline(golden, progress_callback=pipeline_cb, delay_seconds=delay_seconds)
             st.session_state.enriched_dataset = enriched
 
-        progress_bar.progress(100, text="✅ All responses collected!")
-        status_slot.success(f"💾 {len(enriched['rag_samples'])} responses stored in session.")
+        successful = sum(bool(sample.get("actual_response")) for sample in enriched["rag_samples"])
+        progress_bar.progress(100, text="Pipeline requests finished")
+        if successful == len(enriched["rag_samples"]):
+            status_slot.success(f"{successful} responses collected and stored in session.")
+        else:
+            status_slot.warning(f"{successful}/{len(enriched['rag_samples'])} responses collected. Failed requests are excluded from judge metrics.")
+            st.dataframe(pd.DataFrame([
+                {"Question": sample["question"], "Error": sample.get("request_error", "No response")}
+                for sample in enriched["rag_samples"] if not sample.get("actual_response")
+            ]), hide_index=True, width="stretch")
 
         # ── Guardrails tests ──────────────────────────────────────────────────
         st.divider()
         st.subheader("Guardrails Tests")
+        _guardrails_mode_notice()
         g_progress = st.progress(0, text="Running guardrails tests...")
         g_status_slot = st.empty()
 
@@ -250,12 +282,15 @@ with tab2:
             )
 
         with logfire.span("🛡️ Streamlit — Guardrails Tests"):
-            g_results = run_guardrails_eval(enriched["guardrails_samples"], progress_callback=g_cb)
+            g_results = run_guardrails_eval(
+                enriched["guardrails_samples"], progress_callback=g_cb,
+                delay_seconds=0 if backend_mode == "local" else 2,
+            )
             g_metrics = compute_guardrails_metrics(g_results)
             st.session_state.guardrails_results = g_results
-            st.session_state.pipeline_done = True
+            st.session_state.pipeline_done = successful > 0
 
-        g_progress.progress(100, text="✅ Guardrails tests complete!")
+        g_progress.progress(100, text="Guardrail requests finished")
         if g_metrics["errors"]:
             st.warning(f"{g_metrics['errors']} guardrail requests failed. Metrics cover {g_metrics['completed']} completed requests.")
 
@@ -272,16 +307,23 @@ with tab2:
                 "Actual": "Request failed" if r["actual_blocked"] is None else "Blocked" if r["actual_blocked"] else "Passed",
                 "Result": result_label,
             })
-        st.dataframe(pd.DataFrame(g_rows_live), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(g_rows_live), width="stretch", hide_index=True)
 
         mc1, mc2, mc3, mc4 = st.columns(4)
         mc1.metric("Correct", f"{g_metrics['correct']}/{g_metrics['completed']}")
         mc2.metric("Precision", f"{g_metrics['precision']:.2f}")
         mc3.metric("Recall", f"{g_metrics['recall']:.2f}")
         mc4.metric("Accuracy", f"{g_metrics['accuracy']:.2f}")
+        if st.session_state.pipeline_done:
+            st.rerun()
 
     elif st.session_state.pipeline_done:
-        st.success("✅ Pipeline already run. See results below.")
+        saved_samples = st.session_state.enriched_dataset["rag_samples"]
+        successful = sum(bool(sample.get("actual_response")) for sample in saved_samples)
+        if successful == len(saved_samples):
+            st.success(f"{successful} responses collected and stored in session. Reset to run again.")
+        else:
+            st.warning(f"{successful}/{len(saved_samples)} responses collected. Failed requests are excluded from judge metrics. Reset to retry.")
 
         resp_rows = []
         for s in st.session_state.enriched_dataset["rag_samples"]:
@@ -292,12 +334,14 @@ with tab2:
                 "Live Response": s["actual_response"][:100] + "..." if len(s.get("actual_response","")) > 100 else s.get("actual_response",""),
                 "Tool Called": s["actual_tools_called"][0] if s.get("actual_tools_called") else "—",
                 "Contexts Retrieved": len(s.get("actual_contexts", [])),
+                "Request Error": s.get("request_error", ""),
             })
-        st.dataframe(pd.DataFrame(resp_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(resp_rows), width="stretch", hide_index=True)
 
         if st.session_state.guardrails_results:
             st.divider()
             st.subheader("Guardrails Results (from previous run)")
+            _guardrails_mode_notice()
             g_rows_prev = []
             for r in st.session_state.guardrails_results:
                 result_label = {
@@ -308,8 +352,9 @@ with tab2:
                     "ID": r["id"],
                     "Input": r["input"][:70],
                     "Result": result_label,
+                    "Request Error": r.get("request_error", ""),
                 })
-            st.dataframe(pd.DataFrame(g_rows_prev), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(g_rows_prev), width="stretch", hide_index=True)
             gm = compute_guardrails_metrics(st.session_state.guardrails_results)
             if gm["errors"]:
                 st.warning(f"{gm['errors']} guardrail requests failed. Metrics cover {gm['completed']} completed requests.")
@@ -326,18 +371,19 @@ with tab2:
 with tab3:
     st.subheader("Eval Metrics — RAGAS + Tool Correctness")
 
-    if not st.session_state.pipeline_done:
+    if not _has_responses(st.session_state.enriched_dataset):
         st.warning("⚠️ Complete Step 2 (Live Pipeline) first to collect responses.")
     else:
         st.markdown(
             "Runs all **6 metric experiments** on the stored responses. "
-            "LLM-based metrics use `JUDGE_GROQ` key — samples are scored one at a time "
-            "with 40s cooldowns between samples to stay within Groq's **6,000 TPM** on-demand limit. "
-            "Total runtime: ~50 min."
+            "LLM-based metrics call Groq using a dedicated `JUDGE_GROQ` key and may incur provider charges. "
+            "They also download a local embedding model on first use. "
+            "Samples run one at a time with 40s cooldowns, so a full run can take about 50 minutes."
         )
         st.info(
             "Token key used: `JUDGE_GROQ` (separate from production key). "
-            "Each sample is processed individually (~2,800 tokens/burst) to avoid the 6,000 TPM ceiling.",
+            "Install `requirements-evaluation.txt` and set this key before scoring. "
+            "Provider rate limits depend on your account; the cooldowns do not guarantee quota availability.",
             icon="ℹ️",
         )
 
@@ -348,6 +394,11 @@ with tab3:
         )
 
         if run_metrics_btn:
+            try:
+                run_all_metrics = _load_metrics_runner()
+            except (ValueError, RuntimeError) as exc:
+                st.warning(str(exc))
+                st.stop()
             status_slot = st.empty()
             results_slots = {}
 
@@ -365,11 +416,15 @@ with tab3:
             def status_cb(msg: str):
                 status_slot.info(msg)
 
-            with logfire.span("📊 Streamlit — Run Metrics Button"):
-                metric_results = _run_async(
-                    run_all_metrics(st.session_state.enriched_dataset, status_cb=status_cb)
-                )
-                st.session_state.metric_results = metric_results
+            try:
+                with logfire.span("📊 Streamlit — Run Metrics Button"):
+                    metric_results = _run_async(
+                        run_all_metrics(st.session_state.enriched_dataset, status_cb=status_cb)
+                    )
+                    st.session_state.metric_results = metric_results
+            except Exception as exc:
+                st.error(f"Judge scoring failed: {exc}. Check the optional packages, model download access, and JUDGE_GROQ quota, then retry.")
+                st.stop()
 
             status_slot.success("✅ All 6 experiments complete!")
 
@@ -428,4 +483,4 @@ with tab3:
                 {"Metric": name, "Score": f"{score:.3f}" if pd.notna(score) else "—", "Grade": _grade(score) if pd.notna(score) else "—"}
                 for name, score in summary
             ])
-            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+            st.dataframe(summary_df, width="stretch", hide_index=True)

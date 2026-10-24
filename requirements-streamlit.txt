@@ -1,0 +1,5 @@
+# Optional Streamlit chat and local evaluation screens.
+-r requirements.txt
+streamlit==1.66.1
+requests==2.34.2
+pandas==3.1.0

@@ -7,8 +7,8 @@ import sys
 
 def main() -> None:
     if sys.version_info < (3, 11):
-        raise SystemExit("RAG requires Python 3.11 or later.")
-    parser = argparse.ArgumentParser(description="Run the RAG workspace")
+        raise SystemExit("ContextForge-RAG requires Python 3.11 or later.")
+    parser = argparse.ArgumentParser(description="Run the ContextForge-RAG workspace")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")))
     args = parser.parse_args()

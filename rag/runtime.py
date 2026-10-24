@@ -4,13 +4,31 @@ from __future__ import annotations
 import importlib
 import logging
 import os
+import re
+from collections import OrderedDict
 from pathlib import Path
 from threading import Lock
+from time import monotonic
 from typing import Optional
 
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+_LOCAL_CONTEXT_LIMIT = 256
+_LOCAL_CONTEXT_TTL = 30 * 60
+_LOCAL_FOLLOWUP = re.compile(
+    r"^\s*(?:(?:please|can you|could you)\s+)?(?:"
+    r"(?:how|why|when|where)\s+(?:do|does|did|can|could|should|will|would|is|are)\s+"
+    r"(?P<subject>it|they|this|that|these|those)\b|"
+    r"(?:what|which)\s+(?:is|are|was|were)\s+(?P<possessive>its|their)\b|"
+    r"(?:what|which)\s+(?:is|are|was|were)\s+(?P<referent>it|they|this|that|these|those)"
+    r"(?=\s*(?:[?!.]|$))|"
+    r"(?:what|how)\s+about\s+(?P<about>it|its|them|their)\b|"
+    r"(?:explain|describe|summarize|summarise|tell me(?: more)? about)\s+"
+    r"(?P<object>it|its|them|their)\b)",
+    re.IGNORECASE,
+)
 
 
 class RuntimeUnavailable(RuntimeError):
@@ -29,6 +47,8 @@ class RAGRuntime:
         self._cloud_components = None
         self._local_lock = Lock()
         self._cloud_lock = Lock()
+        self._context_lock = Lock()
+        self._local_context: OrderedDict[tuple[str, str], tuple[float, str]] = OrderedDict()
 
     def _check_mode(self):
         if self.mode not in {"local", "cloud"}:
@@ -112,10 +132,53 @@ class RAGRuntime:
     def document(self, document_id):
         return self.local_engine().document(document_id)
 
+    def _local_query(self, q, *, thread_id, scope, top_k):
+        engine = self.local_engine()
+        # Store only the last supported question, never document text or generated
+        # answers. A scope change must not reuse evidence from a different scope.
+        key = (thread_id, scope) if isinstance(thread_id, str) and 0 < len(thread_id) <= 128 else None
+        question = str(q).strip()
+        followup = _LOCAL_FOLLOWUP.match(question)
+        with self._context_lock:
+            now = monotonic()
+            for expired in [context_key for context_key, (timestamp, _) in self._local_context.items()
+                            if now - timestamp >= _LOCAL_CONTEXT_TTL]:
+                del self._local_context[expired]
+            previous = self._local_context.get(key) if key else None
+            resolved = question
+            if followup:
+                if previous is None:
+                    result = engine.query("", scope=scope, top_k=top_k)
+                    result["answer"] = "Please name the subject of your question so I can find supporting document excerpts."
+                    result.update(status="no_answer", sources=[], citations=[])
+                    result["thought_process"] = ["No supported conversation subject is available in this thread and search scope."]
+                    return result
+                start, end = followup.span(followup.lastgroup)
+                resolved = question[:start] + "(" + previous[1] + ")" + question[end:]
+            result = engine.query(resolved, scope=scope, top_k=top_k)
+            if followup and previous:
+                result["thought_process"] = [
+                    "Resolved the follow-up using the previous supported question in this thread and search scope."
+                ] + list(result.get("thought_process", []))
+            if key:
+                if result.get("citations") and result.get("status") != "no_answer" and len(question) <= 2000:
+                    # Repeated follow-ups retain their original anchor, so the
+                    # stored question and future retrieval requests cannot grow.
+                    anchor = previous[1] if followup and previous else question
+                    self._local_context[key] = (now, anchor)
+                    self._local_context.move_to_end(key)
+                    while len(self._local_context) > _LOCAL_CONTEXT_LIMIT:
+                        self._local_context.popitem(last=False)
+                else:
+                    # An unsupported independent question changes the topic too;
+                    # a later pronoun must not silently revive an older subject.
+                    self._local_context.pop(key, None)
+            return result
+
     def query(self, q, *, thread_id, scope="reference", top_k=4):
         self._check_mode()
         if self.mode == "local":
-            return self.local_engine().query(q, scope=scope, top_k=top_k)
+            return self._local_query(q, thread_id=thread_id, scope=scope, top_k=top_k)
         agent, guard = self.cloud_components()
         rail_fired, rail_response = guard(q)
         if rail_fired:

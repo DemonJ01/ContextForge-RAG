@@ -8,9 +8,9 @@ Classifies each result as TP / TN / FP / FN and computes precision + recall.
 import time
 import copy
 import requests
-import logfire
 from uuid import uuid4
 
+from evaluation.telemetry import logfire
 from rag.client_config import backend_url
 
 API_URL = backend_url() + "/query"
@@ -21,7 +21,7 @@ def _is_blocked(response_json: dict) -> bool:
     return any("guardrails fired" in step.lower() for step in tp)
 
 
-def run_guardrails_eval(guardrails_samples: list, progress_callback=None) -> list:
+def run_guardrails_eval(guardrails_samples: list, progress_callback=None, *, delay_seconds=2) -> list:
     """
     Runs each guardrails test case against the live API.
     Adds actual_blocked and result (TP/TN/FP/FN) to each sample in place.
@@ -42,6 +42,7 @@ def run_guardrails_eval(guardrails_samples: list, progress_callback=None) -> lis
                 expected_blocked=sample["expected_blocked"],
             ):
                 failed = False
+                sample["request_error"] = ""
                 try:
                     resp = requests.post(
                         API_URL,
@@ -55,11 +56,13 @@ def run_guardrails_eval(guardrails_samples: list, progress_callback=None) -> lis
                     logfire.error("❌ Cannot reach FastAPI — is the app running on :8000?")
                     blocked = None
                     failed = True
+                    sample["request_error"] = f"Cannot reach {API_URL}. Start the backend or check BACKEND_URL."
 
                 except Exception as e:
                     logfire.error(f"❌ Guardrails test error: {e}")
                     blocked = None
                     failed = True
+                    sample["request_error"] = str(e)
 
                 expected = sample["expected_blocked"]
                 sample["actual_blocked"] = blocked
@@ -83,7 +86,7 @@ def run_guardrails_eval(guardrails_samples: list, progress_callback=None) -> lis
                 )
 
             if i < n - 1:
-                time.sleep(2)
+                time.sleep(delay_seconds)
 
     return samples
 

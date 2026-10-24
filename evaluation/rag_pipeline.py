@@ -11,9 +11,9 @@ import copy
 import json
 import os
 import requests
-import logfire
 from uuid import uuid4
 
+from evaluation.telemetry import logfire
 from rag.client_config import backend_url
 
 API_URL = backend_url() + "/query"
@@ -41,7 +41,7 @@ def detect_tool(thought_process: list) -> str:
     return "unknown"
 
 
-def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
+def run_pipeline(golden_dataset: dict, progress_callback=None, *, delay_seconds=DELAY_BETWEEN_CALLS) -> dict:
     """
     Enriches each rag_sample in golden_dataset with live API results.
     Returns a deep copy with actual_response, actual_contexts, actual_tools_called filled.
@@ -80,6 +80,7 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
                     sample["actual_response"] = raw_answer[:RESPONSE_TRUNCATE]
                     sample["actual_contexts"] = sources[:5]
                     sample["actual_tools_called"] = [detect_tool(thought_process)]
+                    sample["request_error"] = "" if raw_answer else "The backend returned an empty answer."
 
                     logfire.info(
                         "✅ Response captured",
@@ -93,18 +94,20 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
                     sample["actual_response"] = ""
                     sample["actual_contexts"] = []
                     sample["actual_tools_called"] = ["unknown"]
+                    sample["request_error"] = f"Cannot reach {API_URL}. Start the backend or check BACKEND_URL."
 
                 except Exception as e:
                     logfire.error(f"❌ Query failed: {e}")
                     sample["actual_response"] = ""
                     sample["actual_contexts"] = []
                     sample["actual_tools_called"] = ["unknown"]
+                    sample["request_error"] = str(e)
 
             if progress_callback:
                 progress_callback(i, n, question, "done", sample["actual_response"])
 
             if i < n - 1:
-                time.sleep(DELAY_BETWEEN_CALLS)
+                time.sleep(delay_seconds)
 
     return dataset
 

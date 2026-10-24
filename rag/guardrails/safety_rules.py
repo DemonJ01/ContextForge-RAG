@@ -18,7 +18,7 @@ define user ask off topic
   "what is the best restaurant near me"
 
 define bot refuse off topic
-  "I'm an RAG Assistant focused on Kubernetes, Intel hardware, and networking. I can't help with that — but ask me anything technical!"
+  "I'm ContextForge-RAG, focused on Kubernetes, Intel hardware, and networking. I can't help with that — but ask me anything technical!"
 
 define flow handle off topic
   user ask off topic
@@ -56,7 +56,7 @@ define user express greeting
   "howdy"
 
 define bot express greeting
-  "Hello! I'm your RAG Assistant. I specialise in Kubernetes, Intel hardware, and enterprise networking. What can I help you with today?"
+  "Hello! I'm ContextForge-RAG. I specialise in Kubernetes, Intel hardware, and enterprise networking. What can I help you with today?"
 
 define flow greeting
   user express greeting
@@ -73,7 +73,7 @@ define user ask capabilities
   "what are your capabilities"
 
 define bot explain capabilities
-  "I'm a RAG Assistant with deep expertise in: Kubernetes (deployment, scaling, networking, operators), Intel Hardware (CPUs, FPGAs, SRIOV, NICs), Enterprise Networking (SDN, VLANs, BGP, routing). Ask me anything in these areas!"
+  "I'm ContextForge-RAG with deep expertise in: Kubernetes (deployment, scaling, networking, operators), Intel Hardware (CPUs, FPGAs, SRIOV, NICs), Enterprise Networking (SDN, VLANs, BGP, routing). Ask me anything in these areas!"
 
 define flow capabilities
   user ask capabilities
@@ -106,7 +106,7 @@ models:
 instructions:
   - type: general
     content: |
-      You are an RAG Assistant specialising in:
+      You are ContextForge-RAG, an assistant specialising in:
       - Kubernetes (deployment, scaling, operators, networking)
       - Intel hardware (CPUs, FPGAs, NICs, SRIOV)
       - Enterprise networking (SDN, VLANs, BGP, routing)
@@ -119,8 +119,8 @@ instructions:
 RAIL_INDICATORS = [
     "can't help with that — but ask me anything technical",
     "I maintain consistent guidelines regardless of how I am prompted",
-    "Hello! I'm your RAG Assistant",
+    "Hello! I'm ContextForge-RAG",
     "Goodbye! Feel free to return whenever you have more documentation questions",
-    "I'm a RAG Assistant with deep expertise in",
+    "I'm ContextForge-RAG with deep expertise in",
 ]
 

@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f8f7f3">
   <meta name="description" content="A quiet workspace for finding answers in your documentation. Search your library, inspect the evidence, and keep the conversation in context.">
-  <title>RAG — Knowledge workspace</title>
+  <title>ContextForge-RAG — Knowledge workspace</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/rag.css">
-  <script src="/static/rag.js" defer></script>
+  <link rel="stylesheet" href="/static/rag.css?v=2">
+  <script src="/static/rag.js?v=3" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to workspace</a>
@@ -35,9 +35,9 @@
 
   <button class="scrim" id="sidebar-scrim" aria-label="Close navigation" hidden></button>
   <aside class="sidebar" id="sidebar" aria-label="Workspace navigation">
-    <a class="brand" href="/" aria-label="RAG home">
+    <a class="brand" href="/" aria-label="ContextForge-RAG home">
       <svg class="brand-mark" viewBox="0 0 36 36" aria-hidden="true"><path d="M5 7h12v9H5zM20 7h11v9H20zM5 19h12v10H5z"/><path class="brand-open" d="M20 19h11v10H20z"/></svg>
-      <span>RAG<span class="brand-period">.</span></span>
+      <span>ContextForge-RAG</span>
     </a>
     <button class="icon-button sidebar-close" id="sidebar-close" aria-label="Close navigation"><svg class="icon"><use href="#i-close"/></svg></button>
     <div class="sidebar-caption">KNOWLEDGE WORKSPACE</div>
@@ -123,6 +123,6 @@
     <h2 id="clear-title">Clear your conversations?</h2><p>This removes the conversation history saved in this browser. Your source documents stay in the library.</p><div class="dialog-actions"><button class="secondary-button" id="cancel-clear">Keep conversations</button><button class="danger-button" id="confirm-clear">Clear history</button></div>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <noscript><p class="noscript-message">Enable JavaScript to search the RAG workspace and browse your document library.</p></noscript>
+  <noscript><p class="noscript-message">Enable JavaScript to search the ContextForge-RAG workspace and browse your document library.</p></noscript>
 </body>
 </html>

@@ -45,7 +45,7 @@ def generate_node(state: AgentState):
     if query == "CONVERSATIONAL":
         logfire.info("Generating conversational response using memory.")
         prompt = f"""
-        You are a friendly and helpful RAG Assistant.
+        You are ContextForge-RAG, a friendly and helpful assistant.
         Answer the user's latest message using the CONVERSATION HISTORY below.
 
         CONVERSATION HISTORY:

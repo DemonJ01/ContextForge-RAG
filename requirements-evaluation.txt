@@ -1,8 +1,6 @@
-# Optional legacy Streamlit and cloud-backed evaluation tools.
+# Optional cloud-backed scoring dependencies for the evaluation screen.
+-r requirements-streamlit.txt
 -r requirements-cloud.txt
-streamlit
-pandas
-nest-asyncio
 ragas
 deepeval
 langfuse
