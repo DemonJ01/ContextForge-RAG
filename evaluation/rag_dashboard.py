@@ -18,7 +18,7 @@ from rag.client_config import backend_url
 # Page config
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="RAG Evaluation",
+    page_title="ContextForge-RAG Evaluation",
     page_icon="🧪",
     layout="wide",
 )
@@ -115,7 +115,7 @@ golden = st.session_state.golden
 # ─────────────────────────────────────────────────────────────────────────────
 # Header
 # ─────────────────────────────────────────────────────────────────────────────
-st.title("RAG Evaluation")
+st.title("ContextForge-RAG Evaluation")
 st.caption(
     "Step 1: Review ground truth → Step 2: Run live pipeline → Step 3: Score with RAGAS"
 )

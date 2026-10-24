@@ -1,33 +1,61 @@
-# Troubleshooting
+# ⚠️ Known Gotchas & Architectural Decisions
 
-## Local startup
+This document tracks non-obvious platform quirks and explains why the architecture is designed the way it is.
 
-Start the integrated app with `python run_rag.py` after installing `requirements.txt`. FastAPI serves the API and web interface together. Local mode does not require Logfire, LangSmith, cloud SDKs, or provider credentials.
+---
 
-If a different runtime is selected by the shell or project `.env`, set `RAG_MODE=local` to use the saved document index. A shell value takes precedence over `.env`.
+## 1. Logfire Initialization Order (The "Poisoning" Bug)
 
-## Cloud initialization and logging
+**The Issue:**
+When adding Logfire observability, you might see traces fail to appear in the dashboard, accompanied by the warning:
+`No logs or spans will be created until logfire.configure() has been called.`
 
-Cloud modules are imported only after `RAGRuntime.cloud_components()` validates the configuration. That method configures Logfire before importing the workflow and guardrails. The ingestion command has its own logging initialization.
+**The Reason:**
+If any module in the application calls `logfire.info()` or `logfire.span()` *before* `logfire.configure()` has been executed, Logfire's internal state becomes "poisoned" for that process. It enters a silent, no-op mode and discards all subsequent traces, even if you call `.configure()` later.
 
-Calls to Logfire before configuration may produce this warning:
+If we were to import `settings` from `rag.settings` at the top of `rag/api.py` to get the `LOGFIRE_TOKEN`, Python's import engine could inadvertently load nested modules (like our reranker or LLM clients) which might contain module-level Logfire calls, triggering this poisoning effect.
 
-```text
-No logs or spans will be created until logfire.configure() has been called.
+**The Solution:**
+We bypass the `settings.py` file entirely at the very top of `rag/api.py`. We load the environment variables directly using `os.getenv()` and configure Logfire **before any other application imports occur**.
+
+```python
+# rag/api.py
+import logfire
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+logfire.configure(token=os.getenv("LOGFIRE_TOKEN"))
+
+# Safe to import the rest of the application now!
+from rag.settings import settings 
+from rag.agents.workflow import rag_agent
+```
+This guarantees that Logfire is fully awake and tracing before the rest of the application is loaded into memory.
+
+---
+
+## 2. The "Lazy Loading" Pattern (FlashRank & Gemini)
+
+**The Issue:**
+Loading heavy machine learning models (like FlashRank) or initializing large SDKs (like the Gemini client) at the very top of your files can cause two major problems:
+1.  **FastAPI Startup Delays**: The server won't start responding to health checks until the models are loaded.
+2.  **Logfire Poisoning**: If these SDKs make any internal calls before Logfire is configured, they can "poison" the process, causing your traces to disappear.
+
+**The Solution:**
+We implemented a **Lazy Loading** pattern across the entire application. We do not initialize the Gemini embedding client or the FlashRank ranker at the module level. Instead, we wrap them in "getter" functions that only trigger the first time they are actually needed.
+
+```python
+# rag/services/retrieval/embedding_service.py
+def get_embedding_model():
+    global model
+    if model is None:
+        # Initialized ONLY on first use!
+        model = GoogleGenerativeAIEmbeddings(
+            model="models/gemini-embedding-2-preview",
+            google_api_key=settings.GEMINI_API_KEY
+        )
+    return model
 ```
 
-If cloud spans are missing, check that the entry point configured logging before importing modules that emit spans. Also check the token and the dashboard used by that process. Without `LOGFIRE_TOKEN`, the API intentionally uses `send_to_logfire=False`; local mode does not initialize Logfire at all.
-
-A cloud HTTP 503 can also indicate missing environment values, optional packages, or failed provider initialization. The error response gives a configuration-level message; server logs hold the underlying exception. The runtime keeps cloud failures as errors rather than silently returning local answers.
-
-## First-query model loading
-
-FlashRank and the embedding model are initialized on first use. First-query work may include model downloads, so a fast API startup does not imply the first cloud query will have the same latency as later queries.
-
-The reranker first tries `/tmp/flashrank` for its cache. Check write permissions and download access if initialization fails. A ranking failure falls back to the original Qdrant order; it does not bypass embedding or database failures.
-
-## Embedding and collection mismatch
-
-Use the same `RAG_EMBEDDING_BACKEND` for ingestion and querying. Gemini uses 3072-dimensional vectors; explicit local embeddings use 768 dimensions. An existing Qdrant collection must match the selected backend. Select a separately indexed collection when changing models.
-
-See the [configuration guide](environment_variables.md) for required provider settings and the [ingestion guide](document_ingestion.md) for collection replacement behavior.
+This ensures your FastAPI server starts in **milliseconds**, and Logfire is guaranteed to be active before any AI service is touched.

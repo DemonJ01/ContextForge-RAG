@@ -23,11 +23,6 @@ tenvv/
 
 # Secrets
 .env
-.env.*
-*.pem
-*.key
-credentials*.json
-service-account*.json
 commands.md
 
 # Git & IDE
@@ -40,7 +35,7 @@ commands.md
 # Observability local state
 .logfire/
 
-# Local workspace state
+# Claude Code memory
 .claude/
 
 # Source documents — parsed locally, not needed for the build
@@ -49,7 +44,7 @@ data/
 # Eval suite — local only
 evaluation/
 
-# Streamlit scripts only; keep ui/web/ in the build
+# Legacy Streamlit scripts only; keep ui/web/ in the build
 
 # Notebooks & docs
 notebooks/

@@ -1,48 +1,51 @@
-# Document ingestion
+# 📥 Ingestion Engine: Data to Knowledge
 
-The ingestion pipeline extracts document text, saves chunks in `processed_documents/`, and indexes their embeddings in Qdrant. This is the optional cloud pipeline. The default local app searches the saved document text and does not require an ingestion run or provider credentials.
+The Ingestion Engine is a modular, high-performance pipeline designed to convert source documents into a searchable vector format.
 
-## Pipeline
-
+## 🔄 The Pipeline Flow
 ```mermaid
 graph LR
-    Raw[Source documents] --> Parser{Document loader}
+    Raw[Raw Data] --> Parser{Smart Parser}
     Parser -->|PDF| Local[pypdf / pdfplumber]
     Parser -->|HTML| BS4[BeautifulSoup]
-    Parser -->|TXT| Simple[Text loader]
+    Parser -->|TXT| Simple[Text Loader]
     Parser -->|DOCX/PPTX| Office[python-docx / python-pptx]
-    Local --> Chunker[Paragraph chunks]
+    Local --> Chunker[Semantic Chunker]
     BS4 --> Chunker
     Simple --> Chunker
     Office --> Chunker
-    Chunker --> Saved[processed_documents JSON]
-    Chunker --> Embedder[Configured embedding backend]
-    Embedder --> VectorDB[(Qdrant)]
+    Chunker --> Embedder[Gemini gemini-embedding-2-preview]
+    Embedder --> VectorDB[(Qdrant Cloud)]
 ```
 
-## Text extraction
+---
 
-Parsing runs locally; the loaders do not call an OCR service.
+## 🛠️ Technical Specifications
 
-- **PDF**: `pypdf` extracts text first. Pages with no extracted text are retried with `pdfplumber`. Image-only pages may still produce no text.
-- **HTML**: BeautifulSoup removes script and style content before extracting text.
-- **Office documents**: `python-docx` and `python-pptx` handle `.docx` and `.pptx` files.
-- **Plain text**: A text loader reads `.txt` files.
+### 1. Smart Parsing (Local, No External OCR)
+All document parsing runs entirely on-device — no external OCR service or cloud API is required:
+*   **PDFs**: Parsed locally via **pypdf** (primary) and **pdfplumber** (fallback for complex layouts). Handles multi-page PDFs without any page-count limits.
+*   **HTML**: Processed via **BeautifulSoup**. It intelligently strips out `<script>`, `<style>`, and metadata tags to extract only the readable content.
+*   **Office Docs**: Supports `.docx` via `python-docx` and `.pptx` via `python-pptx`.
+*   **Plain Text**: Loaded directly with a simple text reader.
 
-## Chunking and storage
+### 2. Semantic Chunking
+*   **Chunk Size**: `1500` characters.
+*   **Overlap**: Natural overlap (we split by paragraph breaks `\n\n` rather than arbitrary character counts).
+*   **Logic**: The system uses a semantic-ish, paragraph-aware splitter. It attempts to keep paragraphs together to maintain context, ensuring that no chunk is cut off mid-sentence whenever possible. This prevents the LLM from getting "hallucinated" fragments.
 
-The splitter packs paragraphs into chunks of up to `1500` characters. A paragraph that exceeds the limit is split into smaller pieces. There is no explicit chunk overlap, and a long paragraph can be split within a sentence.
+### 3. Vectorization & Storage
+*   **Embedding Model**: `gemini-embedding-2-preview` (Google Gemini). A state-of-the-art embedding model specifically tuned for retrieval tasks.
+*   **Vector Dimensions**: `3072` dimensions.
+*   **Vector Database**: **Qdrant**. We use a Cloud-hosted Qdrant instance for low-latency retrieval.
+*   **Distance Metric**: **Cosine Similarity** (`models.Distance.COSINE`) is used to measure how closely a user query matches our document chunks.
 
-`RAG_EMBEDDING_BACKEND=gemini` uses `gemini-embedding-2-preview` with `3072` dimensions. Explicit `local` selection uses all-mpnet-base-v2 with `768` dimensions. Ingestion and retrieval must use the same backend and a compatible collection. Qdrant stores these vectors with cosine distance (`models.Distance.COSINE`). Provider failures stop the operation rather than switching models.
+---
 
-Re-ingesting a filename and source type replaces its chunks. Obsolete chunks are removed after the replacement vectors have been accepted.
+## 🌍 Universal Ingestion Command
+The engine is "Universal," meaning it automatically detects folder structures and maps them to metadata (e.g., "True" vs "Noisy" data).
 
-## Run ingestion
-
-Install the cloud dependencies and configure the provider environment first. Subdirectories containing `true` or `noisy` map to those source types; other subdirectory names are used as source types directly.
-
-```bash
-python -m rag.ingestion.document_processor data
+```powershell
+# Command to run the full ingestion
+python -m rag.ingestion.document_processor data --wipe
 ```
-
-Pass `--wipe` only to delete and recreate the selected Qdrant collection. The source directory and embedding provider are checked before deletion. Restart the local app after updating its saved document text.

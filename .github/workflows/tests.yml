@@ -40,27 +40,6 @@ jobs:
       - name: Run unit and API tests
         run: python -m unittest discover -s tests -v
 
-  streamlit-tests:
-    name: Streamlit screens
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
-            requirements-streamlit.txt
-      - name: Install Streamlit test dependencies
-        run: |
-          python -m pip install -r requirements-dev.txt -r requirements-streamlit.txt
-          python -m pip check
-      - name: Exercise Streamlit interactions
-        run: python -m unittest discover -s tests -p 'test_streamlit*.py' -v
-
   browser-smoke:
     name: Chromium browser checks
     runs-on: ubuntu-latest

@@ -1,4 +1,4 @@
-"""Streamlit chat interface for the RAG HTTP API."""
+"""Streamlit chat interface for the ContextForge-RAG HTTP API."""
 from uuid import uuid4
 
 import requests
@@ -33,7 +33,7 @@ def error_message(error):
     if isinstance(error, requests.Timeout):
         return "The backend took too long to respond. Try again."
     if isinstance(error, requests.ConnectionError):
-        return "Could not connect to the RAG backend. Check BACKEND_URL and make sure the API is running."
+        return "Could not connect to the ContextForge-RAG backend. Check BACKEND_URL and make sure the API is running."
     if isinstance(error, requests.HTTPError):
         response = error.response
         code = response.status_code if response is not None else "error"
@@ -92,7 +92,7 @@ def answer_message(data):
 
 
 def render_app(use_secrets=False):
-    st.set_page_config(page_title="RAG", page_icon="📚", layout="wide")
+    st.set_page_config(page_title="ContextForge-RAG", page_icon="📚", layout="wide")
     base_url = configured_backend_url(use_secrets)
     if "session_id" not in st.session_state:
         st.session_state.session_id = uuid4().hex
@@ -100,7 +100,7 @@ def render_app(use_secrets=False):
         st.session_state.messages = []
 
     with st.sidebar:
-        st.title("RAG")
+        st.title("ContextForge-RAG")
         scope = st.selectbox("Document scope", ["reference", "all"],
                              format_func=lambda value: "Reference documents" if value == "reference" else "All documents",
                              key="document_scope")
@@ -111,7 +111,7 @@ def render_app(use_secrets=False):
             st.session_state.session_id = uuid4().hex
             st.rerun()
 
-    st.title("RAG")
+    st.title("ContextForge-RAG")
     st.caption("Ask questions about your indexed documents and inspect the supporting sources.")
     retry_index = None
     for index, message in enumerate(st.session_state.messages):

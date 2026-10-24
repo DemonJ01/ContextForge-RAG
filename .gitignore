@@ -63,7 +63,7 @@ commands.md
 
 tenvv
 
-# Local workspace state
+# Claude Code memory & session data
 .claude/
 
 # Logs

@@ -104,7 +104,7 @@
 
   function errorText(error) {
     if (error?.name === "AbortError") return "The request took too long. Please try again with a shorter question.";
-    if (error instanceof TypeError) return "The workspace is unreachable. Check your connection and that the RAG server is running.";
+    if (error instanceof TypeError) return "The workspace is unreachable. Check your connection and that the ContextForge-RAG server is running.";
     return error?.message || "Something interrupted the search. Please try again.";
   }
 
@@ -230,7 +230,7 @@
     const article = element("article", "message message-answer");
     const heading = element("div", "message-eyebrow");
     const wordmark = element("span", "answer-wordmark");
-    wordmark.append(icon("layers"), document.createTextNode("RAG"));
+    wordmark.append(icon("layers"), document.createTextNode("ContextForge-RAG"));
     heading.append(wordmark, element("span", "answer-mode", modeName(message.mode).toUpperCase()));
     const content = element("div", "answer-content");
     const citations = normalizedCitations(message);

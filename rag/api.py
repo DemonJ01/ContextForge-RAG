@@ -46,7 +46,7 @@ class QueryResponse(BaseModel):
 def create_app(project_root: Optional[Path] = None, runtime: Optional[RAGRuntime] = None) -> FastAPI:
     project_root = Path(project_root or PROJECT_ROOT).resolve()
     runtime = runtime if runtime is not None else RAGRuntime(project_root)
-    app = FastAPI(title="RAG", description="Search documents and explore cited evidence.", version="1.0.0")
+    app = FastAPI(title="ContextForge-RAG", description="Search documents and explore cited evidence.", version="1.0.0")
     app.state.runtime = runtime
     web_dir = project_root / "ui" / "web"
     app.mount("/static", StaticFiles(directory=str(web_dir), check_dir=False), name="static")

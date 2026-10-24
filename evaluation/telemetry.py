@@ -13,7 +13,7 @@ def _configured_tracer():
     try:
         import logfire
 
-        logfire.configure(token=token, service_name="rag-evaluation")
+        logfire.configure(token=token, service_name="contextforge-rag-evaluation")
         return logfire
     except Exception as exc:
         logging.getLogger(__name__).warning("Evaluation tracing unavailable: %s", exc)
