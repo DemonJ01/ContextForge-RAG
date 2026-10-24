@@ -21,7 +21,7 @@ have how i if in into is it its me my of on or our please should show some
 that the their them then there these they this those to use using was we
 were what when where which who why will with would you your explain tell
 about describe compare comparison difference differences differ differs different versus vs between
-example examples give get need want find help work works
+example examples give get need want find help work works briefly clarify
 main specific detail details valid one two three four five six seven eight
 nine ten summarize summary list provide supported supports
 field fields value values
@@ -50,6 +50,7 @@ _EXPANSIONS = {
 }
 _MAX_CHUNK_CHARS = 1300
 _CHUNK_OVERLAP = 160
+_DEFINITION_HEADING = re.compile(r"(?im)^what (?:is|are) ([^?\n]{1,80})")
 
 
 def _tokenize(text: str) -> list[str]:
@@ -68,6 +69,15 @@ def _tokenize(text: str) -> list[str]:
         if token not in _STOPWORDS and len(token) > 1:
             tokens.append(token)
     return tokens
+
+
+def _definition_start(text: str, terms: set[str]) -> int | None:
+    """Locate a heading that defines the whole subject, allowing its platform name."""
+    for match in _DEFINITION_HEADING.finditer(text):
+        heading_terms = set(_tokenize(match.group(1)))
+        if terms & heading_terms and terms <= heading_terms | {"kubernetes", "databricks"}:
+            return match.start()
+    return None
 
 
 def _split_text(text: str) -> list[str]:
@@ -179,7 +189,8 @@ class LocalRAG:
         count = self._frequencies.get(token, 0)
         return math.log(1 + (len(self._chunks) - count + 0.5) / (count + 0.5))
 
-    def _score(self, chunk: _Chunk, terms: set[str], expanded: set[str]) -> float:
+    def _score(self, chunk: _Chunk, terms: set[str], expanded: set[str],
+               prefer_definition: bool = False) -> float:
         length = sum(chunk.terms.values())
         score = 0.0
         for token in terms | expanded:
@@ -193,9 +204,11 @@ class LocalRAG:
         # Prefer explanatory headings when the source explicitly defines a
         # queried concept, rather than repeated mentions in an introduction.
         definition_terms = set()
-        for heading in re.findall(r"(?im)^what (?:is|are) ([^?\n]{1,80})", chunk.text):
+        for heading in _DEFINITION_HEADING.findall(chunk.text):
             definition_terms.update(_tokenize(heading))
         score += 1.2 * sum(self._idf(t) for t in terms & definition_terms)
+        if prefer_definition and _definition_start(chunk.text, terms) is not None:
+            score += 3 * sum(self._idf(t) for t in terms & definition_terms)
         return score
 
     def query(self, q: str, scope: str = "reference", top_k: int = 4) -> dict:
@@ -203,7 +216,12 @@ class LocalRAG:
         top_k = max(1, min(8, int(top_k)))
         documents = self.documents(scope)
         allowed = {d["id"] for d in documents}
-        terms = set(_tokenize(q))
+        # Presentation instructions are not part of the requested subject.
+        subject = re.sub(r"\bin (?:simple|plain) (?:terms|language|english)\b", "", q,
+                         flags=re.IGNORECASE)
+        terms = set(_tokenize(subject))
+        prefer_definition = bool(re.search(
+            r"\b(?:what (?:is|are)|explain|clarify|describe)\b", q, re.IGNORECASE))
         expanded = set().union(*(_EXPANSIONS.get(t, set()) for t in terms)) if terms else set()
         candidates = [c for c in self._chunks if c.document_id in allowed]
         vocabulary = set().union(*(c.terms.keys() for c in candidates)) if candidates else set()
@@ -226,7 +244,7 @@ class LocalRAG:
             / max(term_weight, 1e-9) >= 0.8
         }
         ranked = sorted(
-            ((self._score(c, known, expanded), c) for c in candidates
+            ((self._score(c, known, expanded, prefer_definition), c) for c in candidates
              if c.document_id in supported_documents
              and sum(self._idf(t) for t in known & c.terms.keys()) / max(term_weight, 1e-9) >= 0.28),
             key=lambda item: (-item[0], item[1].document_id, item[1].index),
@@ -263,11 +281,13 @@ class LocalRAG:
         citations = []
         for number, (score, chunk) in enumerate(selected, 1):
             document = self._documents[chunk.document_id]
+            start = _definition_start(chunk.text, known) if prefer_definition else None
+            excerpt = chunk.text[start:] if start is not None else chunk.text
             citations.append({
                 "id": f"{chunk.document_id}-{chunk.index}",
                 "document_id": chunk.document_id,
                 "title": document["title"], "filename": document["filename"],
-                "excerpt": chunk.text,
+                "excerpt": excerpt,
                 "score": round(score, 4), "chunk_index": chunk.index,
                 "source_type": document["source_type"],
             })

@@ -12,6 +12,7 @@
   let toastTimer;
   let documentController;
   let overlayTrigger;
+  let healthRequest;
 
   function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -344,6 +345,7 @@
       }
       const message = { ...response, id: uniqueId(), role: "answer", content: response.answer };
       conversation.messages.splice(messageIndex, 0, message);
+      if (!state.health) checkHealth();
       announce("Answer ready. Review the answer and its sources below.");
       state.pending = null;
       if (state.activeId === conversation.id && state.view === "chat") {
@@ -352,6 +354,12 @@
         if (citations.length && window.matchMedia("(min-width: 1101px)").matches) openEvidence(citations);
       }
     } catch (error) {
+      if (error instanceof TypeError) {
+        state.health = null;
+        state.healthError = errorText(error);
+        renderConnection();
+      }
+      checkHealth();
       conversation.messages.splice(messageIndex, 0, { id: uniqueId(), role: "error", content: errorText(error), question: trimmed, scope });
       state.pending = null;
       if (state.activeId === conversation.id && state.view === "chat") renderConversation();
@@ -399,17 +407,29 @@
   }
 
   async function checkHealth() {
-    $("refresh-connection").disabled = true;
-    try {
-      state.health = await request("/health");
-      state.healthError = null;
-    } catch (error) {
-      state.health = null;
-      state.healthError = errorText(error);
-    } finally {
-      $("refresh-connection").disabled = false;
-      renderConnection();
-    }
+    if (healthRequest) return healthRequest;
+    healthRequest = (async () => {
+      $("refresh-connection").disabled = true;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      try {
+        const health = await request("/health", { cache: "no-store", signal: controller.signal });
+        if (health.status !== "ready" || !["local", "cloud"].includes(health.mode)) {
+          throw new Error("The workspace is not ready. Check the server and try again.");
+        }
+        state.health = health;
+        state.healthError = null;
+      } catch (error) {
+        state.health = null;
+        state.healthError = errorText(error);
+      } finally {
+        clearTimeout(timer);
+        $("refresh-connection").disabled = false;
+        renderConnection();
+      }
+    })();
+    try { await healthRequest; }
+    finally { healthRequest = null; }
   }
 
   async function loadDocuments() {
@@ -637,7 +657,7 @@
     $("document-filter").addEventListener("change", renderLibrary);
     $("close-document").addEventListener("click", () => $("document-dialog").close());
     $("document-dialog").addEventListener("close", () => { documentController?.abort(); });
-    $("connection-button").addEventListener("click", () => { closeSidebar(); $("connection-dialog").showModal(); });
+    $("connection-button").addEventListener("click", () => { closeSidebar(); $("connection-dialog").showModal(); checkHealth(); });
     $("close-connection").addEventListener("click", () => $("connection-dialog").close());
     $("refresh-connection").addEventListener("click", () => { checkHealth(); if (state.documentsError) loadDocuments(); });
     $("clear-history").addEventListener("click", () => { closeSidebar(); $("clear-dialog").showModal(); });
@@ -685,6 +705,9 @@
     });
     window.matchMedia("(min-width: 769px)").addEventListener("change", (event) => { if (event.matches) closeSidebar(); });
     window.matchMedia("(max-width: 1100px)").addEventListener("change", () => { closeEvidence(); });
+    window.addEventListener("online", checkHealth);
+    window.addEventListener("focus", checkHealth);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) checkHealth(); });
   }
 
   restore();
@@ -692,4 +715,5 @@
   bindEvents();
   renderConversation();
   Promise.allSettled([checkHealth(), loadDocuments()]);
+  setInterval(() => { if (!document.hidden) checkHealth(); }, 30000);
 })();
