@@ -1,10 +1,17 @@
 import os
+import sys
 import streamlit as st
 import requests
 import time
 import uuid
 import logfire
 from dotenv import load_dotenv
+
+# Streamlit's console entrypoint adds ui/, so include its sibling rag package.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+from rag.client_config import QueryResponseError, query_response
 
 
 # Load environment variables explicitly from the root directory
@@ -90,8 +97,7 @@ if prompt := st.chat_input("Ask about your documentation..."):
                         url = f"{base_url}/query"
                         payload = {"q": prompt, "thread_id": st.session_state.session_id}
                         response = requests.post(url, json=payload, timeout=60)
-                        response.raise_for_status()
-                        data = response.json()
+                        data = query_response(response)
                     
                     # Show Reasoning Steps from Backend
                     steps = data.get("thought_process", [])
@@ -109,10 +115,22 @@ if prompt := st.chat_input("Ask about your documentation..."):
                                 preview = source[:100].replace("\n", " ") + "..."
                                 with st.expander(f"Chunk {i+1}: {preview}"):
                                     st.info(source)
+                except requests.Timeout:
+                    status.update(label="❌ Search timed out", state="error")
+                    st.error("The search timed out. Please try again; cloud models may take longer on their first request.")
+                    st.stop()
+                except requests.ConnectionError:
+                    status.update(label="❌ Connection Failed", state="error")
+                    st.error("Cannot reach the backend. Check that the RAG server is running and BACKEND_URL is correct.")
+                    st.stop()
+                except QueryResponseError as e:
+                    status.update(label="❌ Search could not be completed", state="error")
+                    st.error(str(e))
+                    st.stop()
                 except Exception as e:
                     logfire.error(f"❌ UI-Backend Connection Failed: {e}")
-                    status.update(label="❌ Connection Failed", state="error")
-                    st.error("Backend Offline.")
+                    status.update(label="❌ Search could not be completed", state="error")
+                    st.error("The search could not be displayed. Please try again or check the server logs.")
                     st.stop()
 
             # Final Answer Streaming

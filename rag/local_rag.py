@@ -20,8 +20,8 @@ a an and are as at be been being by can could did do does for from had has
 have how i if in into is it its me my of on or our please should show some
 that the their them then there these they this those to use using was we
 were what when where which who why will with would you your explain tell
-about describe compare comparison difference differences versus vs between
-example examples give get need want find help work works
+about describe compare comparison difference differences differ differs different versus vs between
+example examples give get need want find help work works briefly clarify
 main specific detail details valid one two three four five six seven eight
 nine ten summarize summary list provide supported supports
 field fields value values
@@ -40,6 +40,15 @@ _ALIASES = {
     "installing": "install", "installed": "install", "installation": "install",
     "checking": "check", "checks": "check", "verifying": "verify",
     "processes": "process", "processing": "process", "processed": "process",
+    "failing": "fail", "failed": "fail", "failure": "fail", "failures": "fail",
+    "troubleshooting": "troubleshoot", "debug": "troubleshoot", "debugging": "troubleshoot",
+    "running": "run", "handling": "handle", "statuses": "status",
+    "configuring": "configure", "configured": "configure", "configuration": "configure",
+    "creating": "create", "created": "create", "creation": "create",
+    "viewing": "view", "following": "follow", "retried": "retry", "retrying": "retry",
+    "completed": "complete", "completing": "complete", "completion": "complete",
+    "finished": "complete", "finishing": "complete",
+    "k8s": "kubernetes",
 }
 _EXPANSIONS = {
     "hpa": {"horizontal", "autoscale", "replica"},
@@ -50,12 +59,34 @@ _EXPANSIONS = {
 }
 _MAX_CHUNK_CHARS = 1300
 _CHUNK_OVERLAP = 160
+_DEFINITION_HEADING = re.compile(r"(?im)^what (?:is|are) ([^?\n]{1,80})")
+_DEFINITION_SENTENCE = re.compile(
+    r"(?im)^(?:a |an |the )?([a-z0-9][a-z0-9 ()/'_-]{0,79}?)\s+(?:is|are)\s+")
 
 
-def _tokenize(text: str) -> list[str]:
+def _tokenize(text: str, *, split_identifiers: bool = False) -> list[str]:
     tokens = []
     text = re.sub(r"\bset\s+up\b", "setup", text, flags=re.IGNORECASE)
-    for token in re.findall(r"[a-z0-9]+", text.lower()):
+    text = re.sub(r"\b(?:every\s+day|once\s+(?:a|per)\s+day)\b", "daily", text, flags=re.IGNORECASE)
+    # Apply the same spelling and acronym normalization to source text and
+    # queries. Full names must still identify the specific autoscaler.
+    for pattern, replacement in (
+        (r"\bcron\s*jobs?\b", "cronjob"),
+        (r"\bhorizontal\s+pod\s+autoscal(?:ing|ers?)\b", "hpa"),
+        (r"\bvertical\s+pod\s+autoscal(?:ing|ers?)\b", "vpa"),
+        (r"\btime\s+zone\b", "timezone"),
+        (r"\bcommand[ -]+line\b", "cli"),
+    ):
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    # Keep exact API field names searchable and also index their component
+    # words, so 'concurrency policies' can find 'concurrencyPolicy: Forbid'.
+    words = []
+    for word in re.findall(r"[A-Za-z0-9]+", text):
+        words.append(word.lower())
+        parts = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", word).lower().split()
+        if split_identifiers and len(parts) > 1:
+            words.extend(parts)
+    for token in words:
         if token in _STOPWORDS:
             continue
         token = _ALIASES.get(token, token)
@@ -68,6 +99,81 @@ def _tokenize(text: str) -> list[str]:
         if token not in _STOPWORDS and len(token) > 1:
             tokens.append(token)
     return tokens
+
+
+def normalize_question(question: str) -> str:
+    """Normalize request wrappers while retaining its subject and intent."""
+    subject = re.sub(r"^\s*(?:(?:can|could|would|will) you\s+)?(?:please\s+)?", "", question,
+                     flags=re.IGNORECASE)
+    subject = re.sub(r"^(?:walk|talk) me through\b", "explain", subject, flags=re.IGNORECASE)
+    subject = re.sub(
+        r"^(?:give me\s+)?(?:a\s+)?(?:(?:quick|brief|short|simple)\s+)?"
+        r"(?:overview|summary|explanation|introduction)\s+(?:of|to|about)\b",
+        "explain", subject, flags=re.IGNORECASE,
+    )
+    # These are definition requests, with the same subject as 'what is X'.
+    subject = re.sub(r"^what does (.+?) (?:stand for|mean|do)\s*[?!.]*$", r"what is \1",
+                     subject, flags=re.IGNORECASE)
+    subject = re.sub(r"^what is the purpose of\b", "what is", subject, flags=re.IGNORECASE)
+    subject = re.sub(
+        r"\bin (?:(?:simple|plain) (?:terms|words|language|english)|layman(?:['’]s)? terms)\b",
+        "", subject, flags=re.IGNORECASE,
+    )
+    return subject.strip()
+
+
+def _query_subject(question: str) -> str:
+    """Extract search terms without discarding unfamiliar subject words."""
+    subject = normalize_question(question)
+    # A quantity question about retries still needs 'retry', the job and any
+    # failure qualifiers; the generic 'many times' should not become evidence.
+    subject = re.sub(r"^how many (?:times|retries)\b",
+                     lambda match: "retry" if "retries" in match[0].lower() else "",
+                     subject, flags=re.IGNORECASE)
+    subject = re.sub(r"\bwhat happens?\b", "", subject, flags=re.IGNORECASE)
+    if re.match(r"\s*how\b", subject, flags=re.IGNORECASE):
+        operation = re.fullmatch(
+            r"\s*how\s+(?:do|does|did|can|could|will|would)\s+"
+            r"(?!i\b|you\b|we\b)(.+?)\s+(?:function|operate)\s*[?!.]*\s*",
+            subject, flags=re.IGNORECASE,
+        )
+        if operation and not re.search(r"\b(?:a|an|the|sql)\s*$", operation[1], re.IGNORECASE):
+            subject = operation[1]
+        subject = re.sub(
+            r"\b(?:run|running|configure|configuring|configured|set|setting|handle|handling)\b",
+            "", subject, flags=re.IGNORECASE,
+        )
+    return subject
+
+
+def _one_edit_apart(left: str, right: str) -> bool:
+    """Accept one insertion, deletion, substitution or adjacent transposition."""
+    if abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) == len(right):
+        mismatches = [i for i, (a, b) in enumerate(zip(left, right)) if a != b]
+        return (len(mismatches) == 1 or
+                len(mismatches) == 2 and mismatches[1] == mismatches[0] + 1
+                and left[mismatches[0]] == right[mismatches[1]]
+                and left[mismatches[1]] == right[mismatches[0]])
+    shorter, longer = sorted((left, right), key=len)
+    index = next((i for i, (a, b) in enumerate(zip(shorter, longer)) if a != b),
+                 len(shorter))
+    return shorter[index:] == longer[index + 1:]
+
+
+def _definition_start(text: str, terms: set[str], *, headings_only: bool = False) -> int | None:
+    """Locate a heading that defines the whole subject, allowing its platform name."""
+    patterns = (_DEFINITION_HEADING,) if headings_only else (_DEFINITION_HEADING, _DEFINITION_SENTENCE)
+    for pattern in patterns:
+        for match in pattern.finditer(text):
+            heading_terms = set(_tokenize(match.group(1), split_identifiers=True))
+            # Parser chunks can end with a heading whose definition starts in
+            # the next chunk. An isolated heading is not a useful definition.
+            if (text[match.end():].strip("? \t\r\n") and terms & heading_terms
+                    and terms <= heading_terms | {"kubernetes", "databricks"}):
+                return match.start()
+    return None
 
 
 def _split_text(text: str) -> list[str]:
@@ -139,9 +245,10 @@ class LocalRAG:
             # The source heading often carries useful words omitted by a
             # concise filename (for example, 'Jobs and CronJobs').
             self._document_terms[document_id] = set(_tokenize(title + " " + first_line))
-            self._document_vocabulary[document_id] = set(_tokenize("\n".join(raw_chunks)))
+            self._document_vocabulary[document_id] = set(_tokenize(
+                "\n".join(raw_chunks), split_identifiers=True))
             for index, text in enumerate(pieces):
-                terms = Counter(_tokenize(text))
+                terms = Counter(_tokenize(text, split_identifiers=True))
                 self._chunks.append(_Chunk(document_id, index, text, terms))
                 self._frequencies.update(terms.keys())
         self._average_length = (
@@ -179,7 +286,8 @@ class LocalRAG:
         count = self._frequencies.get(token, 0)
         return math.log(1 + (len(self._chunks) - count + 0.5) / (count + 0.5))
 
-    def _score(self, chunk: _Chunk, terms: set[str], expanded: set[str]) -> float:
+    def _score(self, chunk: _Chunk, terms: set[str], expanded: set[str],
+               prefer_definition: bool = False, prefer_quantity: bool = False) -> float:
         length = sum(chunk.terms.values())
         score = 0.0
         for token in terms | expanded:
@@ -193,9 +301,22 @@ class LocalRAG:
         # Prefer explanatory headings when the source explicitly defines a
         # queried concept, rather than repeated mentions in an introduction.
         definition_terms = set()
-        for heading in re.findall(r"(?im)^what (?:is|are) ([^?\n]{1,80})", chunk.text):
-            definition_terms.update(_tokenize(heading))
+        for heading in _DEFINITION_HEADING.findall(chunk.text):
+            definition_terms.update(_tokenize(heading, split_identifiers=True))
         score += 1.2 * sum(self._idf(t) for t in terms & definition_terms)
+        if prefer_definition and _definition_start(chunk.text, terms) is not None:
+            score += 3 * sum(self._idf(t) for t in terms)
+        if prefer_quantity:
+            # A retry-count question needs an explanation containing a count,
+            # rather than an incidental 'this won't retry' in unrelated YAML.
+            # Match the remaining subject in the same line as the number.
+            quantity_terms = terms - self._document_terms[chunk.document_id]
+            if quantity_terms and any(
+                re.search(r"\b\d+\b", line)
+                and quantity_terms <= set(_tokenize(line, split_identifiers=True))
+                for line in chunk.text.splitlines()
+            ):
+                score += 2 * sum(self._idf(t) for t in quantity_terms)
         return score
 
     def query(self, q: str, scope: str = "reference", top_k: int = 4) -> dict:
@@ -203,12 +324,34 @@ class LocalRAG:
         top_k = max(1, min(8, int(top_k)))
         documents = self.documents(scope)
         allowed = {d["id"] for d in documents}
-        terms = set(_tokenize(q))
-        expanded = set().union(*(_EXPANSIONS.get(t, set()) for t in terms)) if terms else set()
+        subject = _query_subject(q)
         candidates = [c for c in self._chunks if c.document_id in allowed]
         vocabulary = set().union(*(c.terms.keys() for c in candidates)) if candidates else set()
+        spelling_terms = set().union(*(self._document_terms[d] for d in allowed)) if allowed else set()
+        corrections = []
+
+        def correct_topic(match):
+            word = match.group()
+            if len(word) < 6 or set(_tokenize(word)) <= vocabulary:
+                return word
+            matches = [term for term in spelling_terms if len(term) >= 6
+                       and _one_edit_apart(word.lower(), term)]
+            # Limit correction to an unambiguous indexed topic, never an
+            # arbitrary similar word anywhere in the corpus.
+            if len(matches) == 1:
+                corrections.append(f'Matched "{word}" to indexed topic "{matches[0]}".')
+                return matches[0]
+            return word
+
+        subject = re.sub(r"[A-Za-z0-9]+", correct_topic, subject)
+        terms = set(_tokenize(subject, split_identifiers=True))
+        prefer_definition = bool(re.search(
+            r"\b(?:what (?:is|are)|explain|clarify|describe)\b", subject, re.IGNORECASE))
+        prefer_quantity = bool(re.search(r"\bhow many\b", q, re.IGNORECASE))
+        expanded = set().union(*(_EXPANSIONS.get(t, set()) for t in terms)) if terms else set()
         known = terms & vocabulary
-        trace = [f"Searched {len(documents)} indexed documents using local BM25 retrieval."]
+        trace = [f"Searched {len(documents)} indexed documents using local BM25 retrieval.",
+                 *corrections]
         no_answer = {
             "answer": "I couldn't find enough evidence in the indexed documents to answer this question. Try a question about Kubernetes Jobs, CronJobs, autoscaling, monitoring, work queues, or Databricks jobs.",
             "status": "no_answer", "thought_process": trace + ["No sufficiently matching source text was found."],
@@ -226,7 +369,7 @@ class LocalRAG:
             / max(term_weight, 1e-9) >= 0.8
         }
         ranked = sorted(
-            ((self._score(c, known, expanded), c) for c in candidates
+            ((self._score(c, known, expanded, prefer_definition, prefer_quantity), c) for c in candidates
              if c.document_id in supported_documents
              and sum(self._idf(t) for t in known & c.terms.keys()) / max(term_weight, 1e-9) >= 0.28),
             key=lambda item: (-item[0], item[1].document_id, item[1].index),
@@ -249,7 +392,15 @@ class LocalRAG:
                                max(1, len(set(chunk.terms) | set(other.terms)))
                                for _, other in selected), default=0.0)
                 new_terms = (known & chunk.terms.keys()) - covered
-                return score * (1 - 0.55 * overlap) + 1.5 * sum(self._idf(t) for t in new_terms)
+                # For a definition request, lead with an explicit definition
+                # heading before diversifying the supporting passages. Broad
+                # incidental mentions can otherwise win the coverage bonus.
+                starts_with_definition = (
+                    prefer_definition and not selected
+                    and _definition_start(chunk.text, known, headings_only=True) is not None
+                )
+                return (starts_with_definition,
+                        score * (1 - 0.55 * overlap) + 1.5 * sum(self._idf(t) for t in new_terms))
             best = max(pool, key=selection_score)
             pool.remove(best)
             if selected and best[0] < ranked[0][0] * 0.48:
@@ -263,11 +414,13 @@ class LocalRAG:
         citations = []
         for number, (score, chunk) in enumerate(selected, 1):
             document = self._documents[chunk.document_id]
+            start = _definition_start(chunk.text, known) if prefer_definition else None
+            excerpt = chunk.text[start:] if start is not None else chunk.text
             citations.append({
                 "id": f"{chunk.document_id}-{chunk.index}",
                 "document_id": chunk.document_id,
                 "title": document["title"], "filename": document["filename"],
-                "excerpt": chunk.text,
+                "excerpt": excerpt,
                 "score": round(score, 4), "chunk_index": chunk.index,
                 "source_type": document["source_type"],
             })

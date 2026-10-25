@@ -54,6 +54,134 @@ class LocalRAGTests(unittest.TestCase):
                 self.assertEqual(result["status"], "complete")
                 self.assertEqual(result["citations"][0]["filename"], filename)
 
+    def test_natural_wording_retrieves_the_actual_supporting_evidence(self):
+        cases = {
+            "How can I troubleshoot a failing CronJob?": (
+                "kubernetes_cronjobs.docx", "kubectl describe cronjob <cronjob-name>"),
+            "How do I debug failed CronJobs?": (
+                "kubernetes_cronjobs.docx", "kubectl describe cronjob <cronjob-name>"),
+            "How to run a job every day?": (
+                "kubernetes_cronjobs.docx", 'schedule: "@daily"'),
+            "How can I configure cron schedules?": (
+                "kubernetes_cronjobs.docx", "Common Schedule Examples"),
+            "What happens if my job fails?": (
+                "kubernetes_job_monitoring.docx", "backoffLimit: 2"),
+            "How does Redis handle work queues?": (
+                "kubernetes_parallel_work_queue.txt", 'rpush job2 "apple"'),
+            "How do I configure autoscaling?": (
+                "kubernetes_pod_autoscaling.html", "kubectl"),
+        }
+        for query, (filename, fact) in cases.items():
+            with self.subTest(query=query):
+                result = self.rag.query(query)
+                self.assertEqual(result["status"], "complete")
+                self.assertEqual(result["citations"][0]["filename"], filename)
+                self.assertIn(fact, "\n".join(result["sources"]))
+
+    def test_natural_api_field_and_plural_wording_has_source_evidence(self):
+        cases = {
+            "Explain CronJob concurrency policies": "concurrencyPolicy: Forbid",
+            "How do I check Kubernetes job statuses?": "kubectl get jobs",
+            "How do Kubernetes jobs handle failures?": "backoffLimit",
+        }
+        for query, fact in cases.items():
+            with self.subTest(query=query):
+                result = self.rag.query(query)
+                self.assertEqual(result["status"], "complete")
+                self.assertIn(fact, "\n".join(result["sources"]))
+
+    def test_terminal_how_operation_verbs_preserve_named_subject_evidence(self):
+        for question, filename in (
+            ("How do CronJobs work?", "kubernetes_cronjobs.docx"),
+            ("How does this work queue work?", "kubernetes_parallel_work_queue.txt"),
+            ("How does HPA work?", "kubernetes_pod_autoscaling.html"),
+        ):
+            expected = self.rag.query(question)
+            for verb in ("function", "operate"):
+                alternative = question.removesuffix("work?") + verb + "?"
+                with self.subTest(question=alternative):
+                    result = self.rag.query(alternative)
+                    self.assertEqual(result["status"], "complete")
+                    self.assertEqual(result["citations"][0]["filename"], filename)
+                    self.assertEqual(result["sources"], expected["sources"])
+                    for citation in result["citations"]:
+                        self.assertIn(citation["excerpt"], self.rag.document(citation["document_id"])["content"])
+
+    def test_how_operation_verbs_also_work_for_genuine_contextual_followups(self):
+        from rag.runtime import RAGRuntime
+        runtime = RAGRuntime(ROOT, mode="local")
+        named = runtime.query("How does this work queue function?", thread_id="named-queue")
+        self.assertEqual(named["status"], "complete")
+        self.assertTrue(all(c["filename"] == "kubernetes_parallel_work_queue.txt" for c in named["citations"]))
+        for index, question in enumerate(("How does it function?", "How does this operate?")):
+            with self.subTest(question=question):
+                thread = f"how-operation-{index}"
+                anchor = runtime.query("Explain HPA in simple words", thread_id=thread)
+                result = runtime.query(question, thread_id=thread)
+                self.assertEqual(result["status"], "complete")
+                self.assertEqual(result["sources"], anchor["sources"])
+                self.assertTrue(all(c["filename"] == "kubernetes_pod_autoscaling.html" for c in result["citations"]))
+                self.assertIn("Resolved the follow-up", result["thought_process"][0])
+
+    def test_operation_predicates_do_not_hide_named_functions_or_unsupported_capabilities(self):
+        for question in (
+            "How do SQL functions operate?", "How does this SQL function work?",
+            "How do I create a SQL function?", "How does a SQL function?",
+            "How does teleport operate?", "How do Kubernetes Jobs teleport?",
+        ):
+            with self.subTest(question=question):
+                result = self.rag.query(question, scope="all")
+                self.assertEqual(result["status"], "no_answer")
+                self.assertEqual(result["sources"], [])
+                self.assertEqual(result["citations"], [])
+
+    def test_unambiguous_topic_typos_retrieve_the_indexed_subject(self):
+        cases = {
+            "How do I monitor kubernets jobs?": "kubernetes_job_monitoring.docx",
+            "What is a CronJab?": "kubernetes_cronjobs.docx",
+        }
+        for query, filename in cases.items():
+            with self.subTest(query=query):
+                result = self.rag.query(query)
+                self.assertEqual(result["status"], "complete")
+                self.assertEqual(result["citations"][0]["filename"], filename)
+                self.assertTrue(any("Matched" in step for step in result["thought_process"]))
+
+    def test_presentation_wording_preserves_definitions_and_comparisons(self):
+        for query in ("Explain HPA in simple words", "What is HPA in plain English?"):
+            with self.subTest(query=query):
+                result = self.rag.query(query)
+                self.assertEqual(result["status"], "complete")
+                self.assertTrue(result["sources"][0].startswith("What is HPA?"))
+                self.assertIn("automatically scales the number of pods", result["sources"][0])
+        result = self.rag.query("What are Kubernetes Jobs in simple terms?")
+        self.assertEqual(result["status"], "complete")
+        self.assertIn("A Kubernetes Job is", result["sources"][0])
+        result = self.rag.query("How do HPA and VPA differ?")
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["citations"][0]["filename"], "kubernetes_pod_autoscaling.html")
+
+    def test_definition_requests_lead_with_the_definition_when_only_one_excerpt_is_requested(self):
+        cases = {
+            "What is a Kubernetes CronJob?": ("What Are CronJobs?", "thin wrapper around Jobs"),
+            "Describe Kubernetes CronJobs": ("What Are CronJobs?", "thin wrapper around Jobs"),
+            "Explain HPA": ("What is HPA?", "automatically scales the number of pods"),
+            "What are Kubernetes Jobs?": ("A Kubernetes Job is", "successfully terminate"),
+        }
+        for question, (opening, fact) in cases.items():
+            with self.subTest(question=question):
+                result = self.rag.query(question, top_k=1)
+                self.assertEqual(result["status"], "complete")
+                self.assertEqual(len(result["sources"]), 1)
+                self.assertTrue(result["sources"][0].startswith(opening))
+                self.assertIn(fact, result["sources"][0])
+
+    def test_comparison_does_not_treat_a_troubleshooting_symptom_as_a_definition(self):
+        result = self.rag.query("What is the difference between Jobs and CronJobs?", top_k=1)
+        self.assertEqual(result["status"], "complete")
+        self.assertIn("A CronJob is a thin wrapper around Jobs", result["sources"][0])
+        self.assertNotIn("Symptoms: CronJob exists but no Jobs are created", result["sources"][0])
+
     def test_answers_quote_real_text_and_have_resolving_citations(self):
         result = self.rag.query("How do I monitor Kubernetes job logs?", top_k=3)
         self.assertEqual(result["status"], "complete")
@@ -74,6 +202,11 @@ class LocalRAGTests(unittest.TestCase):
             "How do Kubernetes jobs teleport pods?",
             "Which Kubernetes Job restart policy prevents quantum entanglement?",
             "What is the Kubernetes default password?",
+            "How do I configure the Kubernetes default password?",
+            "How do Kubernetes Jobs handle quantum entanglement?",
+            "How can I troubleshoot a telepathic CronJob?",
+            "How do I run a job with teleportation?",
+            "What are the limitations of Kubernetes CronJobs?",
         ):
             with self.subTest(query=query):
                 result = self.rag.query(query, scope="all")

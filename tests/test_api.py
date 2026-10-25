@@ -259,6 +259,87 @@ class RuntimeModeTests(unittest.TestCase):
 
 
 class RealEngineIntegrationTests(unittest.TestCase):
+    def test_local_followups_keep_the_subject_and_respect_thread_and_scope(self):
+        runtime = RAGRuntime(PROJECT_ROOT, mode="local")
+        with TestClient(create_app(PROJECT_ROOT, runtime=runtime)) as client:
+            def ask(question, thread="cron-thread", scope="reference"):
+                response = client.post("/query", json={
+                    "q": question, "thread_id": thread, "scope": scope,
+                })
+                self.assertEqual(response.status_code, 200)
+                return response.json()
+
+            self.assertEqual(ask("What are Kubernetes CronJobs?")["status"], "complete")
+            followup = ask("How do they work?")
+            self.assertEqual(followup["status"], "complete")
+            self.assertIn("kubernetes_cronjobs.docx", [c["filename"] for c in followup["citations"]])
+            self.assertEqual(ask("How do they work?", thread="another-thread")["status"], "no_answer")
+            self.assertEqual(ask("How do they work?", scope="all")["status"], "no_answer")
+            self.assertEqual(ask("Explain quantum entanglement")["status"], "no_answer")
+            self.assertEqual(ask("How do they work?")["status"], "no_answer")
+
+    def test_yesno_followup_keeps_cronjob_and_hpa_evidence_separate(self):
+        runtime = RAGRuntime(PROJECT_ROOT, mode="local")
+        with TestClient(create_app(PROJECT_ROOT, runtime=runtime)) as client:
+            def ask(question, thread):
+                response = client.post("/query", json={"q": question, "thread_id": thread})
+                self.assertEqual(response.status_code, 200)
+                return response.json()
+
+            self.assertEqual(ask("What is a Kubernetes CronJob?", "cron")["status"], "complete")
+            cron_followup = ask("Does it use CPU metrics?", "cron")
+            self.assertEqual(cron_followup["status"], "no_answer")
+            self.assertEqual(cron_followup["citations"], [])
+            self.assertEqual(cron_followup["sources"], [])
+            self.assertIn("Resolved the follow-up", cron_followup["thought_process"][0])
+
+            self.assertEqual(ask("Explain HPA in simple words", "hpa")["status"], "complete")
+            hpa_followup = ask("Does it use CPU metrics?", "hpa")
+            self.assertEqual(hpa_followup["status"], "complete")
+            self.assertTrue(all(c["filename"] == "kubernetes_pod_autoscaling.html"
+                                for c in hpa_followup["citations"]))
+            self.assertIn("CPU", "\n".join(hpa_followup["sources"]))
+
+            # An explicitly named subject starts its own question even when
+            # the chat previously discussed a different technology.
+            ask("What is a Kubernetes CronJob?", "explicit")
+            explicit = ask("Does this HPA use CPU metrics?", "explicit")
+            self.assertEqual(explicit["status"], "complete")
+            self.assertEqual(explicit["citations"][0]["filename"], "kubernetes_pod_autoscaling.html")
+            self.assertFalse(any("Resolved the follow-up" in step
+                                 for step in explicit["thought_process"]))
+
+    def test_yesno_pronouns_require_context_for_each_thread_and_scope(self):
+        runtime = RAGRuntime(PROJECT_ROOT, mode="local")
+        with TestClient(create_app(PROJECT_ROOT, runtime=runtime)) as client:
+            def ask(question, thread="hpa", scope="reference"):
+                response = client.post("/query", json={
+                    "q": question, "thread_id": thread, "scope": scope,
+                })
+                self.assertEqual(response.status_code, 200)
+                return response.json()
+
+            for index, question in enumerate((
+                "Does it use CPU metrics?", "Can it use CPU metrics?",
+                "Do they use CPU metrics?", "Will it use CPU metrics?",
+                "Is it using CPU metrics?", "Are they using CPU metrics?",
+            )):
+                with self.subTest(question=question):
+                    result = ask(question, thread=f"fresh-{index}")
+                    self.assertEqual(result["status"], "no_answer")
+                    self.assertEqual(result["citations"], [])
+                    self.assertIn("name the subject", result["answer"])
+
+            self.assertEqual(ask("Explain HPA in simple words")["status"], "complete")
+            self.assertEqual(ask("Does it use CPU metrics?", scope="all")["status"], "no_answer")
+            self.assertEqual(ask("Does it use CPU metrics?", thread="other")["status"], "no_answer")
+            self.assertEqual(ask("Does it use CPU metrics?")["status"], "complete")
+            self.assertEqual(ask("Explain quantum entanglement")["status"], "no_answer")
+            reset = ask("Does it use CPU metrics?")
+            self.assertEqual(reset["status"], "no_answer")
+            self.assertEqual(reset["sources"], [])
+            self.assertIn("name the subject", reset["answer"])
+
     def test_bundled_documents_are_usable_without_credentials(self):
         with patch.dict(os.environ, {}, clear=True):
             runtime = RAGRuntime(PROJECT_ROOT, mode="local")

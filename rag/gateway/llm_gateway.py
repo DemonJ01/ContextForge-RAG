@@ -8,13 +8,14 @@ from rag.settings import settings
 # Production gateway config:
 #   - Fallback: configured primary Groq integration → configured backup integration
 #   - Cache: simple (exact request matching)
-#   - Retry: 2 attempts on rate limit / server error before triggering the fallback target
+#   - Retry transient errors at the gateway, respecting provider retry delays.
 GATEWAY_CONFIG = {
     "strategy": {"mode": "fallback"},
     "cache": {"mode": "simple"},
     "retry": {
         "attempts": 2,
-        "on_status_codes": [429, 503]
+        "on_status_codes": [408, 429, 500, 502, 503, 504, 529],
+        "use_retry_after_headers": True,
     },
     "targets": [
         {"override_params": {"model": f"@{settings.GROQ_SLUG}/llama-3.3-70b-versatile"}},
@@ -44,6 +45,8 @@ def get_langchain_llm(feature: str = "rag") -> ChatOpenAI:
         base_url=PORTKEY_GATEWAY_URL,
         model=f"@{settings.GROQ_SLUG}/llama-3.3-70b-versatile",
         temperature=0,
+        max_retries=0,  # Portkey owns retries; do not multiply requests in LangChain.
+        timeout=90,
         default_headers=createHeaders(
             api_key=settings.PORTKEY_API_KEY,
             config=GATEWAY_CONFIG,

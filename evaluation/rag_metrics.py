@@ -1,14 +1,16 @@
 """
 Phase 2 — RAGAS + Tool Correctness metrics.
-Uses JUDGE_GROQ key so production GROQ_API_KEY is never exhausted by eval runs.
-All LLM-based metrics run in batches of 5 with 30s cooldowns between sub-batches
-and 60s cooldowns between experiments — calibrated for Groq's 6,000 TPM on_demand tier.
-Contexts are truncated to 300 chars (2 chunks max) so no single request exceeds the limit.
+Uses JUDGE_GROQ when configured, otherwise the main GROQ_API_KEY.
+LLM-based metrics run one sample at a time with cooldowns between requests.
+Complete answers and retrieved evidence are preserved for meaningful judging;
+provider quotas and response lengths determine token cost and runtime.
 """
 
 
 import os
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from queue import Empty, Queue
 import logfire
 import pandas as pd
 from openai import AsyncOpenAI
@@ -16,7 +18,6 @@ from openai import AsyncOpenAI
 
 from ragas.llms import llm_factory
 from ragas.embeddings import HuggingFaceEmbeddings
-from ragas import SingleTurnSample
 from ragas.metrics.collections import (
     Faithfulness,
     AnswerRelevancy,
@@ -28,11 +29,9 @@ from ragas.metrics.collections import (
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 JUDGE_MODEL = "llama-3.1-8b-instant"
 COOLDOWN_STANDARD = 62
-COOLDOWN_MINI = 40       # between individual samples — lets sliding TPM window recover (~2,800 tok/sample)
+COOLDOWN_MINI = 40       # pacing between individual samples; actual provider quotas still apply
 GENERAL_BATCH_SIZE = 1  # one sample at a time: abatch_score fires calls concurrently per sample,
                          # so batch>1 stacks multiple samples' async calls inside the same second
-CONTEXT_TRUNCATE = 300  # chars per context chunk — reduces single request from ~7,700 to ~400 tokens
-CONTEXT_LIMIT = 2       # number of context chunks passed to RAGAS per sample
 
 
 def _build_judge():
@@ -49,44 +48,75 @@ async def _cooldown(seconds: int, label: str, status_cb=None):
     msg = f"⏳ {seconds}s cooldown after {label} (Groq TPM buffer)..."
     if status_cb:
         status_cb(msg)
-    for _ in range(seconds // 10):
-        await asyncio.sleep(10)
+    remaining = seconds
+    while remaining > 0:
+        interval = min(10, remaining)
+        await asyncio.sleep(interval)
+        remaining -= interval
     if status_cb:
-        status_cb(f"✅ Ready — starting next experiment.")
+        status_cb("✅ Ready — continuing evaluation.")
         
         
 def _prep_samples(golden_dataset: dict) -> list:
     """
-    Returns only samples with actual_response populated.
-    Truncates contexts to CONTEXT_TRUNCATE chars and limits to CONTEXT_LIMIT chunks
-    so a single RAGAS LLM call stays well under the 6,000 TPM ceiling.
-    (Live contexts from Qdrant are ~1,500 chars each — without truncation a single
-    Faithfulness request exceeds 7,000 tokens which hard-fails on the on_demand tier.)
+    Returns answered samples from successful requests without shortening evidence.
+    Failed or pending requests are reported by capture coverage, never silently
+    included in the averages as valid answers.
     """
     valid = []
     for s in golden_dataset["rag_samples"]:
+        if s.get("pipeline_status") in {"error", "pending"}:
+            continue
         response = s.get("actual_response", "").strip()
         if not response:
             continue
         # An empty live retrieval is a result, never permission to substitute
         # answer-key evidence and inflate grounding/recall metrics.
         raw_contexts = s.get("actual_contexts", s.get("relevant_contexts", [])) or []
-        contexts = [c[:CONTEXT_TRUNCATE] for c in raw_contexts[:CONTEXT_LIMIT]]
-        valid.append({**s, "actual_contexts": contexts})
+        valid.append({**s, "actual_contexts": list(raw_contexts)})
     return valid
 
 
 def _score_df(metric_key: str, samples: list, scores) -> pd.DataFrame:
+    if len(samples) != len(scores):
+        raise ValueError(f"{metric_key}: expected {len(samples)} scores, received {len(scores)}.")
     return pd.DataFrame([
         {"question": s["question"][:65], metric_key: round(float(r.value), 3)}
         for s, r in zip(samples, scores)
     ])
 
 
+def run_metrics_sync(golden_dataset: dict, status_cb=None) -> dict:
+    """Run judging in an isolated loop; deliver queued progress on the caller thread.
+
+    Streamlit can reuse or already be running an event loop. The worker owns its
+    loop, while all UI callbacks stay on the Streamlit script thread.
+    """
+    updates = Queue()
+
+    def worker():
+        return asyncio.run(run_all_metrics(golden_dataset, status_cb=updates.put))
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="rag-eval") as executor:
+        future = executor.submit(worker)
+        while not future.done():
+            try:
+                message = updates.get(timeout=0.1)
+            except Empty:
+                continue
+            if status_cb:
+                status_cb(message)
+        while not updates.empty():
+            message = updates.get_nowait()
+            if status_cb:
+                status_cb(message)
+        return future.result()
+
+
 async def _batched_score(metric, inputs: list, samples: list, status_cb=None, label: str = "") -> list:
     """
     Runs abatch_score in chunks of GENERAL_BATCH_SIZE with cooldowns between chunks.
-    Keeps each burst under 6,000 TPM on Groq's on_demand tier.
+    Reduces concurrent load; provider limits still depend on complete input sizes.
     """
     all_scores = []
     batches = [inputs[i : i + GENERAL_BATCH_SIZE] for i in range(0, len(inputs), GENERAL_BATCH_SIZE)]
@@ -102,12 +132,14 @@ async def run_all_metrics(golden_dataset: dict, status_cb=None) -> dict:
     Runs all 6 experiments. Returns dict keyed by metric name → DataFrame.
     status_cb(message: str) is called for live UI updates.
     """
-    judge_llm, ragas_embeddings = _build_judge()
     samples = _prep_samples(golden_dataset)
 
     if not samples:
         raise ValueError("No samples with actual_response found. Run Phase 1 first.")
 
+    if status_cb:
+        status_cb(f"Scoring {len(samples)}/{len(golden_dataset['rag_samples'])} captured answers; failed or pending requests are excluded.")
+    judge_llm, ragas_embeddings = _build_judge()
     results = {}
 
     with logfire.span("🧪 Eval Phase 2 — All Metrics", total_samples=len(samples)):
@@ -187,9 +219,9 @@ async def run_all_metrics(golden_dataset: dict, status_cb=None) -> dict:
 
         await _cooldown(COOLDOWN_STANDARD, "Context Recall", status_cb)
 
-        # ── Exp 5: Answer Correctness (split into batches) ────────────────────
+        # ── Exp 5: Answer Correctness ────────────────────────────────────────
         if status_cb:
-            status_cb(f"🧪 Exp 5/6 — Answer Correctness batch 1/2...")
+            status_cb(f"🧪 Exp 5/6 — Answer Correctness ({len(samples)} samples)...")
         with logfire.span("🧪 Exp 5 — Answer Correctness"):
             inputs = [
                 {

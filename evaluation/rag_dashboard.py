@@ -13,17 +13,13 @@ import logfire
 logfire.configure(token=os.getenv("LOGFIRE_TOKEN"), service_name="rag-evaluation")
 
 # ─────────────────────────────────────────────────────────────────────────────
-import asyncio
 import json
-import nest_asyncio
 import pandas as pd
 import streamlit as st
 
-nest_asyncio.apply()
-
-from evaluation.rag_pipeline import run_pipeline, load_golden_dataset
+from evaluation.rag_pipeline import run_pipeline, load_golden_dataset, summarize_pipeline
 from evaluation.guardrails_evaluation import run_guardrails_eval, compute_guardrails_metrics
-from evaluation.rag_metrics import run_all_metrics
+from evaluation.rag_metrics import run_metrics_sync
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Page config
@@ -73,13 +69,27 @@ def _color_score(val):
 def _render_metric_table(df: pd.DataFrame, metric_col: str, title: str):
     avg = df[metric_col].mean()
     st.markdown(f"**{title}** — AVG: {_badge(avg)} `{avg:.2f}` {_grade(avg)}")
-    styled = df.style.applymap(_color_score, subset=[metric_col]).format({metric_col: "{:.3f}"})
+    styler = df.style
+    # pandas 3 removed applymap; older versions supported by Streamlit lack map.
+    colorize = getattr(styler, "map", None)
+    if colorize is None:
+        colorize = styler.applymap
+    styled = colorize(_color_score, subset=[metric_col]).format({metric_col: "{:.3f}"})
     st.dataframe(styled, use_container_width=True, hide_index=True)
 
 
-def _run_async(coro):
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coro)
+def _render_pipeline_coverage(dataset):
+    coverage = summarize_pipeline(dataset)
+    message = (
+        f"Captured {coverage['completed']}/{coverage['total']} responses "
+        f"({coverage['coverage']:.0%} coverage); {coverage['failed']} failed, "
+        f"{coverage['pending']} pending."
+    )
+    if coverage["failed"] or coverage["pending"] or not coverage["total"]:
+        st.warning(message + " Scores cover captured answers only; retry incomplete queries to restore coverage.")
+    else:
+        st.success(message)
+    return coverage
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -173,13 +183,15 @@ with tab2:
     st.markdown(
         "Sends each golden question to your **running FastAPI app** (`localhost:8000/query`). "
         "Captures the actual response, retrieved contexts, and tool called. "
-        "Responses are truncated to 300 chars to save tokens for the RAGAS judging step."
+        "Full answers and evidence are retained for judging; tables show shortened previews."
     )
     st.info(
         "⚠️ Make sure your FastAPI backend is running first: `uvicorn rag.api:app --reload --port 8000`",
         icon="⚠️",
     )
 
+    captured = st.session_state.enriched_dataset
+    incomplete = summarize_pipeline(captured) if captured else None
     col_p1, col_p2, col_p3 = st.columns([1, 1, 2])
     run_pipeline_btn = col_p1.button(
         "▶️ Run Live Pipeline",
@@ -190,7 +202,12 @@ with tab2:
     reset_btn = col_p2.button(
         "🔄 Reset & Re-run",
         width="stretch",
-        disabled=not st.session_state.pipeline_done,
+        disabled=captured is None,
+    )
+    retry_pipeline_btn = col_p3.button(
+        "↻ Retry incomplete RAG queries",
+        width="stretch",
+        disabled=not incomplete or not (incomplete["failed"] or incomplete["pending"]),
     )
 
     if reset_btn:
@@ -201,7 +218,8 @@ with tab2:
         st.session_state.pipeline_rows = []
         st.rerun()
 
-    if run_pipeline_btn:
+    if run_pipeline_btn or retry_pipeline_btn:
+        st.session_state.metric_results = None
         st.session_state.pipeline_rows = []
         progress_bar = st.progress(0, text="Starting pipeline...")
         live_table_slot = st.empty()
@@ -217,8 +235,8 @@ with tab2:
                 st.session_state.pipeline_rows.append({
                     "#": i + 1,
                     "Question": short_q,
-                    "Live Response (truncated)": short_r if short_r else "⚠️ No response",
-                    "Status": "✅" if short_r else "❌",
+                    "Live Response (preview)": short_r if short_r else "⚠️ No response",
+                    "Status": "✅ Captured" if stage == "done" else "❌ Request failed",
                 })
                 live_table_slot.dataframe(
                     pd.DataFrame(st.session_state.pipeline_rows),
@@ -227,15 +245,31 @@ with tab2:
                 )
                 progress_bar.progress(
                     int(((i + 1) / total) * 100),
-                    text=f"[{i+1}/{total}] ✅ Done",
+                    text=f"[{i+1}/{total}] {'Captured' if stage == 'done' else 'Request failed'}",
                 )
 
+        def checkpoint(dataset):
+            # Keep successful captures available when a rerun interrupts collection.
+            st.session_state.enriched_dataset = dataset
+
         with logfire.span("🚀 Streamlit — Run Pipeline Button"):
-            enriched = run_pipeline(golden, progress_callback=pipeline_cb)
+            enriched = run_pipeline(
+                captured if retry_pipeline_btn else golden,
+                progress_callback=pipeline_cb,
+                retry_failed_only=retry_pipeline_btn,
+                checkpoint_callback=checkpoint,
+            )
             st.session_state.enriched_dataset = enriched
 
-        progress_bar.progress(100, text="✅ All responses collected!")
-        status_slot.success(f"💾 {len(enriched['rag_samples'])} responses stored in session.")
+        progress_bar.progress(100, text="Response collection finished.")
+        coverage = _render_pipeline_coverage(enriched)
+        status_slot.info(f"{coverage['completed']} captured responses are available for scoring.")
+        failed_rows = [
+            {"Question": sample["question"], "Error": sample["pipeline_error"]}
+            for sample in enriched["rag_samples"] if sample.get("pipeline_status") == "error"
+        ]
+        if failed_rows:
+            st.dataframe(pd.DataFrame(failed_rows), use_container_width=True, hide_index=True)
 
         # ── Guardrails tests ──────────────────────────────────────────────────
         st.divider()
@@ -250,7 +284,10 @@ with tab2:
             )
 
         with logfire.span("🛡️ Streamlit — Guardrails Tests"):
-            g_results = run_guardrails_eval(enriched["guardrails_samples"], progress_callback=g_cb)
+            if retry_pipeline_btn and st.session_state.guardrails_results is not None:
+                g_results = st.session_state.guardrails_results
+            else:
+                g_results = run_guardrails_eval(enriched["guardrails_samples"], progress_callback=g_cb)
             g_metrics = compute_guardrails_metrics(g_results)
             st.session_state.guardrails_results = g_results
             st.session_state.pipeline_done = True
@@ -279,9 +316,10 @@ with tab2:
         mc2.metric("Precision", f"{g_metrics['precision']:.2f}")
         mc3.metric("Recall", f"{g_metrics['recall']:.2f}")
         mc4.metric("Accuracy", f"{g_metrics['accuracy']:.2f}")
+        st.rerun()
 
-    elif st.session_state.pipeline_done:
-        st.success("✅ Pipeline already run. See results below.")
+    elif st.session_state.enriched_dataset is not None:
+        _render_pipeline_coverage(st.session_state.enriched_dataset)
 
         resp_rows = []
         for s in st.session_state.enriched_dataset["rag_samples"]:
@@ -292,6 +330,8 @@ with tab2:
                 "Live Response": s["actual_response"][:100] + "..." if len(s.get("actual_response","")) > 100 else s.get("actual_response",""),
                 "Tool Called": s["actual_tools_called"][0] if s.get("actual_tools_called") else "—",
                 "Contexts Retrieved": len(s.get("actual_contexts", [])),
+                "Request Status": s.get("pipeline_status", "pending"),
+                "Error": s.get("pipeline_error") or "",
             })
         st.dataframe(pd.DataFrame(resp_rows), use_container_width=True, hide_index=True)
 
@@ -319,6 +359,14 @@ with tab2:
             mc3.metric("Recall", f"{gm['recall']:.2f}")
             mc4.metric("Accuracy", f"{gm['accuracy']:.2f}")
 
+    if st.session_state.enriched_dataset is not None:
+        st.download_button(
+            "Download captured results (JSON)",
+            data=json.dumps(st.session_state.enriched_dataset, indent=2),
+            file_name="rag_evaluation_capture.json",
+            mime="application/json",
+        )
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 3 — Eval Metrics
@@ -329,25 +377,27 @@ with tab3:
     if not st.session_state.pipeline_done:
         st.warning("⚠️ Complete Step 2 (Live Pipeline) first to collect responses.")
     else:
+        coverage = _render_pipeline_coverage(st.session_state.enriched_dataset)
         st.markdown(
             "Runs all **6 metric experiments** on the stored responses. "
-            "LLM-based metrics use `JUDGE_GROQ` key — samples are scored one at a time "
-            "with 40s cooldowns between samples to stay within Groq's **6,000 TPM** on-demand limit. "
-            "Total runtime: ~50 min."
+            "Samples are scored one at a time with 40s cooldowns between samples "
+            "and 62s between experiments. Full answers and evidence are sent to the judge; "
+            "token costs, provider quotas, and response lengths determine runtime."
         )
         st.info(
-            "Token key used: `JUDGE_GROQ` (separate from production key). "
-            "Each sample is processed individually (~2,800 tokens/burst) to avoid the 6,000 TPM ceiling.",
+            "The judge uses `JUDGE_GROQ` when configured and otherwise `GROQ_API_KEY`. "
+            "Use a separate judge key and suitable provider limits for the complete evidence.",
             icon="ℹ️",
         )
 
         run_metrics_btn = st.button(
             "▶️ Run Eval Metrics",
             type="primary",
-            disabled=not st.session_state.pipeline_done,
+            disabled=not coverage["completed"],
         )
 
         if run_metrics_btn:
+            st.session_state.metric_results = None
             status_slot = st.empty()
             results_slots = {}
 
@@ -365,13 +415,19 @@ with tab3:
             def status_cb(msg: str):
                 status_slot.info(msg)
 
-            with logfire.span("📊 Streamlit — Run Metrics Button"):
-                metric_results = _run_async(
-                    run_all_metrics(st.session_state.enriched_dataset, status_cb=status_cb)
+            metric_results = {}
+            try:
+                with logfire.span("📊 Streamlit — Run Metrics Button"):
+                    metric_results = run_metrics_sync(st.session_state.enriched_dataset, status_cb=status_cb)
+                    st.session_state.metric_results = metric_results
+            except Exception:
+                logfire.exception("Evaluation judging failed")
+                status_slot.error(
+                    "Judging did not complete. Check judge credentials, provider limits, and logs. "
+                    "Captured query results are retained; scoring can be retried."
                 )
-                st.session_state.metric_results = metric_results
-
-            status_slot.success("✅ All 6 experiments complete!")
+            else:
+                status_slot.success(f"All 6 experiments complete on {coverage['completed']}/{coverage['total']} captured answers.")
 
             for key, title in metric_display_names.items():
                 if key in metric_results:

@@ -1,9 +1,16 @@
 import os
+import sys
 import streamlit as st
 import requests
 import time
 import uuid
 import logfire
+
+# Streamlit's console entrypoint adds ui/, so include its sibling rag package.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+from rag.client_config import QueryResponseError, query_response
 
 
 # Initialize Logfire
@@ -82,11 +89,7 @@ if prompt := st.chat_input("Ask about your documentation..."):
                         payload = {"q": prompt, "thread_id": st.session_state.session_id}
                         response = requests.post(url, json=payload, timeout=60)
 
-                        if response.status_code != 200:
-                            st.error(f"Backend Error: {response.status_code} - {response.text}")
-                            st.stop()
-
-                        data = response.json()
+                        data = query_response(response)
 
                     steps = data.get("thought_process", [])
                     for step in steps:
@@ -94,10 +97,22 @@ if prompt := st.chat_input("Ask about your documentation..."):
 
                     status.update(label="✅ Answer Synthesized", state="complete", expanded=False)
 
+                except requests.Timeout:
+                    status.update(label="❌ Search timed out", state="error")
+                    st.error("The search timed out. Please try again; cloud models may take longer on their first request.")
+                    st.stop()
+                except requests.ConnectionError:
+                    status.update(label="❌ Connection Failed", state="error")
+                    st.error("Cannot reach the backend. Check that the RAG server is running and BACKEND_URL is correct.")
+                    st.stop()
+                except QueryResponseError as e:
+                    status.update(label="❌ Search could not be completed", state="error")
+                    st.error(str(e))
+                    st.stop()
                 except Exception as e:
                     logfire.error(f"❌ UI-Backend Connection Failed: {e}")
-                    status.update(label="❌ Connection Failed", state="error")
-                    st.error("Backend Offline.")
+                    status.update(label="❌ Search could not be completed", state="error")
+                    st.error("The search could not be displayed. Please try again or check the server logs.")
                     st.stop()
 
             # Answer streaming — outside status so it's always visible
@@ -118,8 +133,10 @@ if prompt := st.chat_input("Ask about your documentation..."):
                     for i, source in enumerate(sources):
                         st.caption(f"Chunk {i + 1}")
                         st.info(source)
+            elif data.get("status") == "no_answer":
+                st.caption("ℹ️ No supporting evidence was found in the indexed documents.")
             else:
-                st.caption("ℹ️ No context retrieved — conversational response.")
+                st.caption("ℹ️ This response has no retrieved source passages.")
 
             st.session_state.messages.append({"role": "assistant", "content": full_answer})
             logfire.info("✅ Chat cycle completed successfully.")

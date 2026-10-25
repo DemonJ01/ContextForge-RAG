@@ -235,6 +235,11 @@ dialog[open] { animation: appear 180ms ease; }
 .connection-stats > div { display: flex; align-items: center; justify-content: space-between; gap: 20px; border-top: 1px solid var(--border); padding: 14px 0; }
 .connection-stats dt { font-size: 11px; color: var(--text-secondary); }
 .connection-stats dd { font: 11px var(--font-mono); margin: 0; }
+.configuration-details { margin: 0 28px 24px; border-top: 1px solid var(--border); padding-top: 16px; font-size: 12px; line-height: 1.7; color: var(--text-secondary); overflow-wrap: anywhere; }
+.configuration-details summary { cursor: pointer; color: var(--text); font-size: 12px; }
+.configuration-details p { margin: 14px 0; }
+.configuration-details ol { padding-left: 20px; }
+.configuration-details li { margin: 8px 0; }
 .toast { position: fixed; z-index: 150; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--forest); color: var(--surface); padding: 14px 22px; border-radius: 7px; box-shadow: var(--shadow); font-size: 12px; max-width: calc(100% - 32px); }
 .noscript-message { position: fixed; inset: auto 20px 20px; background: var(--surface); padding: 20px; border: 1px solid var(--border); z-index: 150; }
 @keyframes spin { to { transform: rotate(360deg); } }

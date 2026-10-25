@@ -6,12 +6,13 @@
   const SVG_NS = "http://www.w3.org/2000/svg";
   const state = {
     conversations: [], activeId: null, draft: "", scope: "reference", view: "chat",
-    health: null, healthError: null, documents: [], documentsLoaded: false,
+    health: null, healthError: null, configuration: null, configurationError: null, documents: [], documentsLoaded: false,
     documentsError: null, pending: null, evidence: null, overlay: null,
   };
   let toastTimer;
   let documentController;
   let overlayTrigger;
+  let healthRequest;
 
   function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -56,6 +57,7 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         conversations: state.conversations.slice(0, 30), activeId: state.activeId,
+        pending: state.pending, draft: state.draft,
       }));
     } catch (_) {
       notify("Browser storage is unavailable. This conversation will last for this visit.");
@@ -68,12 +70,28 @@
       if (!saved || !Array.isArray(saved.conversations)) return;
       state.conversations = saved.conversations.filter((c) => c && typeof c.id === "string"
         && typeof c.title === "string" && Array.isArray(c.messages)).slice(0, 30).map((c) => ({
-          ...c, messages: c.messages.filter((m) => m && ["user", "answer", "error"].includes(m.role)
+          ...c, draft: typeof c.draft === "string" ? c.draft.slice(0, 2000) : "",
+          messages: c.messages.filter((m) => m && ["user", "answer", "error"].includes(m.role)
             && typeof m.content === "string"),
         }));
+      state.draft = typeof saved.draft === "string" ? saved.draft.slice(0, 2000) : "";
       state.activeId = state.conversations.some((c) => c.id === saved.activeId) ? saved.activeId : null;
       const conversation = activeConversation();
       if (conversation) state.scope = conversation.scope === "all" ? "all" : "reference";
+      // A navigation ends the fetch, so turn its saved position into an explicit
+      // retry instead of silently restoring a question with no answer.
+      const pending = saved.pending;
+      const interrupted = state.conversations.find((c) => c.id === pending?.conversationId);
+      if (interrupted && typeof pending.question === "string" && pending.question.trim()
+        && pending.question.length <= 2000 && ["reference", "all"].includes(pending.scope)
+        && Number.isInteger(pending.messageIndex) && pending.messageIndex >= 0
+        && pending.messageIndex <= interrupted.messages.length) {
+        interrupted.messages.splice(pending.messageIndex, 0, {
+          id: uniqueId(), role: "error", question: pending.question, scope: pending.scope,
+          content: "This search was interrupted when the page closed or reloaded. Try again to finish it.",
+        });
+        persist();
+      }
     } catch (_) { /* A malformed local history should never prevent startup. */ }
   }
 
@@ -81,8 +99,21 @@
     return state.conversations.find((c) => c.id === state.activeId) || null;
   }
 
-  function isCloud(mode = state.health?.mode) { return mode === "cloud"; }
-  function modeName(mode = state.health?.mode) { return isCloud(mode) ? "Cloud · remote index" : "Local · extractive"; }
+  function rememberDraft() {
+    const draft = $("question").value.slice(0, 2000);
+    const conversation = activeConversation();
+    if (conversation) conversation.draft = draft;
+    else state.draft = draft;
+  }
+
+  function restoreDraft() {
+    const conversation = activeConversation();
+    $("question").value = conversation ? conversation.draft || "" : state.draft;
+    resizeComposer();
+  }
+
+  function isCloud(mode = state.health?.mode ?? state.configuration?.configured_mode) { return mode === "cloud"; }
+  function modeName(mode = state.health?.mode ?? state.configuration?.configured_mode) { return isCloud(mode) ? "Cloud · remote index" : "Local · extractive"; }
   function collectionName(type) { return type === "true" ? "Reference" : "Extended library"; }
 
   async function request(path, options = {}) {
@@ -166,6 +197,7 @@
   }
 
   function newConversation() {
+    rememberDraft();
     state.activeId = null;
     state.draft = "";
     state.scope = "reference";
@@ -179,12 +211,12 @@
   }
 
   function selectConversation(id) {
+    rememberDraft();
     state.activeId = id;
     const conversation = activeConversation();
     state.scope = conversation?.scope === "all" ? "all" : "reference";
     $("scope").value = state.scope;
-    $("question").value = "";
-    resizeComposer();
+    restoreDraft();
     showView("chat");
     renderConversation();
     persist();
@@ -310,10 +342,11 @@
     if (trimmed.length > 2000) { notify("Keep your question to 2,000 characters or fewer."); $("question").focus(); return; }
     let conversation = activeConversation();
     if (!conversation) {
-      conversation = { id: uniqueId(), title: trimmed.slice(0, 90), scope, messages: [], createdAt: Date.now() };
+      conversation = { id: uniqueId(), title: trimmed.slice(0, 90), scope, draft: "", messages: [], createdAt: Date.now() };
       state.conversations.unshift(conversation);
       state.conversations = state.conversations.slice(0, 30);
       state.activeId = conversation.id;
+      state.draft = "";
     }
     conversation.scope = scope;
     state.scope = scope;
@@ -327,9 +360,12 @@
     }
     else conversation.messages.push({ id: uniqueId(), role: "user", content: trimmed });
     messageIndex ??= conversation.messages.length;
-    $("question").value = "";
-    resizeComposer();
-    state.pending = { conversationId: conversation.id, question: trimmed, messageIndex };
+    if (!retryId) {
+      conversation.draft = "";
+      $("question").value = "";
+      resizeComposer();
+    }
+    state.pending = { conversationId: conversation.id, question: trimmed, scope, messageIndex };
     showView("chat");
     renderConversation();
     persist();
@@ -344,6 +380,7 @@
       }
       const message = { ...response, id: uniqueId(), role: "answer", content: response.answer };
       conversation.messages.splice(messageIndex, 0, message);
+      if (!state.health) checkHealth();
       announce("Answer ready. Review the answer and its sources below.");
       state.pending = null;
       if (state.activeId === conversation.id && state.view === "chat") {
@@ -352,6 +389,12 @@
         if (citations.length && window.matchMedia("(min-width: 1101px)").matches) openEvidence(citations);
       }
     } catch (error) {
+      if (error instanceof TypeError) {
+        state.health = null;
+        state.healthError = errorText(error);
+        renderConnection();
+      }
+      checkHealth();
       conversation.messages.splice(messageIndex, 0, { id: uniqueId(), role: "error", content: errorText(error), question: trimmed, scope });
       state.pending = null;
       if (state.activeId === conversation.id && state.view === "chat") renderConversation();
@@ -371,18 +414,26 @@
     const topDot = $("top-mode").querySelector(".status-dot");
     topDot.className = `status-dot ${connected ? "connected" : "disconnected"}`;
     $("connection-label").textContent = connected ? modeName() : "Workspace unavailable";
-    $("connection-detail").textContent = connected ? "Connected to your workspace" : "Check connection details";
+    $("connection-detail").textContent = connected ? isCloud() ? "Remote collection ready" : "Connected to your workspace" : "Check connection details";
     $("top-mode-text").textContent = connected ? isCloud() ? "Remote index" : "Local search" : "Offline";
     $("connection-description").textContent = connected
-      ? isCloud() ? "Answers use your configured cloud models and remote retrieval index. The knowledge library shows the documents bundled with this workspace."
+      ? isCloud() ? "The remote collection is reachable and contains vectors with the expected dimensions. Model-provider access is checked when you send a question. The library shows bundled documents."
         : "Search runs locally across the indexed document text. Answers are extracted source passages; no language model or cloud credentials are used."
       : state.healthError || "The workspace could not be reached. Check that the server is running and try again.";
     const stats = $("connection-stats");
     stats.replaceChildren();
     if (connected) {
-      const rows = [
-        ["Answer mode", isCloud() ? "Cloud" : "Extractive"],
-        [isCloud() ? "Bundled documents" : "Indexed documents", state.health.document_count],
+      const rows = isCloud() ? [
+        ["Answer mode", "Cloud"],
+        ["Remote vector points", state.health.remote_point_count],
+        ["Remote vector dimensions", state.health.remote_vector_dimension],
+        ["Remote documents", "Unknown"],
+        ["Bundled documents", state.health.bundled_document_count ?? state.health.document_count],
+        ["Bundled reference documents", state.health.bundled_reference_document_count ?? state.health.reference_document_count],
+        ["Bundled passages", state.health.bundled_chunk_count ?? state.health.chunk_count],
+      ] : [
+        ["Answer mode", "Extractive"],
+        ["Indexed documents", state.health.document_count],
         ["Reference documents", state.health.reference_document_count ?? state.health.reference_count],
         ["Indexed passages", state.health.chunk_count],
       ];
@@ -392,24 +443,80 @@
         row.append(element("dt", "", label), element("dd", "", value));
         stats.append(row);
       });
-      $("library-count").textContent = Number.isFinite(state.health.document_count) ? state.health.document_count : "—";
+      const documentCount = state.health.bundled_document_count ?? state.health.document_count;
+      $("library-count").textContent = Number.isFinite(documentCount) ? documentCount : "—";
     }
+    renderConfiguration();
     $("library-heading").textContent = isCloud() ? "Your bundled library." : "The source of it all.";
     updateControls();
   }
 
-  async function checkHealth() {
-    $("refresh-connection").disabled = true;
-    try {
-      state.health = await request("/health");
-      state.healthError = null;
-    } catch (error) {
-      state.health = null;
-      state.healthError = errorText(error);
-    } finally {
-      $("refresh-connection").disabled = false;
-      renderConnection();
+  function renderConfiguration() {
+    const configuration = state.configuration;
+    const content = $("configuration-content");
+    content.replaceChildren();
+    if (!configuration) {
+      $("configuration-summary").textContent = "Cloud setup unavailable";
+      content.append(element("p", "", state.configurationError || "The server configuration could not be checked."));
+      return;
     }
+    $("configuration-summary").textContent = configuration.cloud_configuration_ready
+      ? "Cloud setup configured · provider access unverified" : "Cloud setup needs attention";
+    content.append(element("p", "", `Server mode: ${configuration.configured_mode}. Embeddings: ${configuration.embedding_backend} · ${configuration.embedding_model}.`));
+    content.append(element("p", "", configuration.authentication));
+    const missingVariables = configuration.missing_environment_variables;
+    const missingPackages = configuration.missing_cloud_packages;
+    if (Array.isArray(missingVariables) && missingVariables.length) {
+      content.append(element("p", "", `Missing server variables: ${missingVariables.join(", ")}.`));
+    }
+    if (Array.isArray(missingPackages) && missingPackages.length) {
+      content.append(element("p", "", `Missing cloud packages: ${missingPackages.join(", ")}.`));
+    }
+    if (Array.isArray(configuration.steps)) {
+      const steps = element("ol");
+      configuration.steps.forEach((step) => steps.append(element("li", "", step)));
+      content.append(steps);
+    }
+  }
+
+  async function checkHealth() {
+    if (healthRequest) return healthRequest;
+    healthRequest = (async () => {
+      $("refresh-connection").disabled = true;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      try {
+        const [healthResult, configurationResult] = await Promise.allSettled([
+          request("/health", { cache: "no-store", signal: controller.signal }),
+          request("/configuration", { cache: "no-store", signal: controller.signal }),
+        ]);
+        if (configurationResult.status === "fulfilled") {
+          state.configuration = configurationResult.value;
+          state.configurationError = null;
+        } else {
+          state.configuration = null;
+          state.configurationError = "The server configuration could not be checked. Try again after the server is available.";
+        }
+        if (healthResult.status === "rejected") throw healthResult.reason;
+        const health = healthResult.value;
+        if (health.status !== "ready" || !["local", "cloud"].includes(health.mode)) {
+          throw new Error("The workspace is not ready. Check the server and try again.");
+        }
+        state.health = health;
+        state.healthError = null;
+      } catch (error) {
+        state.health = null;
+        state.healthError = error?.name === "AbortError"
+          ? "The connection check timed out. Check that the RAG server is running, then try again."
+          : errorText(error);
+      } finally {
+        clearTimeout(timer);
+        $("refresh-connection").disabled = false;
+        renderConnection();
+      }
+    })();
+    try { await healthRequest; }
+    finally { healthRequest = null; }
   }
 
   async function loadDocuments() {
@@ -606,7 +713,7 @@
 
   function bindEvents() {
     $("query-form").addEventListener("submit", (event) => { event.preventDefault(); sendQuestion($("question").value); });
-    $("question").addEventListener("input", resizeComposer);
+    $("question").addEventListener("input", () => { rememberDraft(); resizeComposer(); persist(); });
     $("question").addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
@@ -637,7 +744,7 @@
     $("document-filter").addEventListener("change", renderLibrary);
     $("close-document").addEventListener("click", () => $("document-dialog").close());
     $("document-dialog").addEventListener("close", () => { documentController?.abort(); });
-    $("connection-button").addEventListener("click", () => { closeSidebar(); $("connection-dialog").showModal(); });
+    $("connection-button").addEventListener("click", () => { closeSidebar(); $("connection-dialog").showModal(); checkHealth(); });
     $("close-connection").addEventListener("click", () => $("connection-dialog").close());
     $("refresh-connection").addEventListener("click", () => { checkHealth(); if (state.documentsError) loadDocuments(); });
     $("clear-history").addEventListener("click", () => { closeSidebar(); $("clear-dialog").showModal(); });
@@ -685,11 +792,16 @@
     });
     window.matchMedia("(min-width: 769px)").addEventListener("change", (event) => { if (event.matches) closeSidebar(); });
     window.matchMedia("(max-width: 1100px)").addEventListener("change", () => { closeEvidence(); });
+    window.addEventListener("online", checkHealth);
+    window.addEventListener("focus", checkHealth);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) checkHealth(); });
   }
 
   restore();
   $("scope").value = state.scope;
+  restoreDraft();
   bindEvents();
   renderConversation();
   Promise.allSettled([checkHealth(), loadDocuments()]);
+  setInterval(() => { if (!document.hidden) checkHealth(); }, 30000);
 })();

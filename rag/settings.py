@@ -11,7 +11,7 @@ class Settings:
     # --- VECTOR DB (QDRANT) ---
     QDRANT_URL = os.getenv("QDRANT_CLUSTER_ENDPOINT")
     QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
-    QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION") or "rag"
+    QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "").strip() or "rag"
 
     # --- REASONING ENGINE (GROQ) ---
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")

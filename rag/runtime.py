@@ -4,13 +4,46 @@ from __future__ import annotations
 import importlib
 import logging
 import os
+import re
+from collections import OrderedDict
 from pathlib import Path
 from threading import Lock
+from time import monotonic
 from typing import Optional
 
 from dotenv import load_dotenv
+from rag.cloud_status import (
+    CloudIndexReadiness, CloudIndexUnavailable, configuration_status,
+    embedding_configuration, required_environment_variables,
+)
+from rag.local_rag import normalize_question
 
 logger = logging.getLogger(__name__)
+
+_LOCAL_CONTEXT_LIMIT = 256
+_LOCAL_CONTEXT_TTL = 30 * 60
+_LOCAL_FOLLOWUP = re.compile(
+    r"^\s*(?:(?:please|can you|could you)\s+)?(?:"
+    # Match true subject pronouns in yes/no questions. Demonstratives such as
+    # 'this' can introduce an explicit subject ('Does this HPA ...'), so leave
+    # those questions to ordinary retrieval rather than substituting context.
+    r"(?:do|does|did|can|could|should|will|would|is|are|was|were|has|have|had|must|may|might)\s+"
+    r"(?P<yesno>it|they)\b|"
+    r"(?:how|why|when|where)\s+(?:do|does|did|can|could|should|will|would|is|are)\s+"
+    # A demonstrative followed by a named subject ('this HPA') must retain
+    # that subject. Resolve standalone demonstratives with generic predicates.
+    r"(?P<subject>it|they|(?:this|that|these|those)(?=\s+(?:"
+    r"work(?!\s+queues?\b)|run|scale|fail|differ|behave|operate|function|help|handle|support|use|"
+    r"affect|change|compare|relate|interact|recover|start|stop|restart|"
+    r"used|configured|deployed|scheduled|managed|different)\b|\s*(?:[?!.]|$)))\b|"
+    r"(?:what|which)\s+(?:is|are|was|were)\s+(?P<possessive>its|their)\b|"
+    r"(?:what|which)\s+(?:is|are|was|were)\s+(?P<referent>it|they|this|that|these|those)"
+    r"(?=\s*(?:[?!.]|$))|"
+    r"(?:what|how)\s+about\s+(?P<about>it|its|them|their)\b|"
+    r"(?:explain|describe|summarize|summarise|tell me(?: more)? about)\s+"
+    r"(?P<object>it|its|them|their)\b)",
+    re.IGNORECASE,
+)
 
 
 class RuntimeUnavailable(RuntimeError):
@@ -27,8 +60,11 @@ class RAGRuntime:
         self.mode = (mode if mode is not None else os.getenv("RAG_MODE", "local")).strip().lower()
         self._local_engine = None
         self._cloud_components = None
+        self._cloud_readiness = CloudIndexReadiness()
         self._local_lock = Lock()
         self._cloud_lock = Lock()
+        self._context_lock = Lock()
+        self._local_context: OrderedDict[tuple[str, str], tuple[float, str]] = OrderedDict()
 
     def _check_mode(self):
         if self.mode not in {"local", "cloud"}:
@@ -51,15 +87,13 @@ class RAGRuntime:
         with self._cloud_lock:
             if self._cloud_components is not None:
                 return self._cloud_components
-            embedding_backend = os.getenv("RAG_EMBEDDING_BACKEND", "gemini").strip().lower()
-            if embedding_backend not in {"gemini", "local"}:
-                raise RuntimeUnavailable("RAG_EMBEDDING_BACKEND must be either 'gemini' or 'local'.")
-            required = (
-                "PORTKEY_API_KEY", "GROQ_API_KEY",
-                "QDRANT_CLUSTER_ENDPOINT", "QDRANT_API_KEY",
-            )
-            if embedding_backend == "gemini":
-                required += ("GEMINI_API_KEY",)
+            embedding = embedding_configuration()
+            if not embedding["valid"]:
+                raise RuntimeUnavailable(
+                    "RAG_EMBEDDING_BACKEND must be either 'gemini' or 'local', and "
+                    "RAG_GEMINI_EMBEDDING_MODEL must select a supported model. Check /configuration."
+                )
+            required = required_environment_variables(embedding["backend"])
             missing = [name for name in required if not os.getenv(name, "").strip()]
             if missing:
                 raise RuntimeUnavailable(
@@ -91,10 +125,26 @@ class RAGRuntime:
                 ) from exc
             return self._cloud_components
 
+    def configuration(self):
+        return configuration_status(self.mode)
+
     def health(self):
         self._check_mode()
         if self.mode == "cloud":
             self.cloud_components()
+            try:
+                remote = self._cloud_readiness.check()
+            except CloudIndexUnavailable as exc:
+                raise RuntimeUnavailable(str(exc)) from None
+            bundled = dict(self.local_engine().health())
+            return {
+                "status": "ready", "mode": "cloud", "credentials_required": True,
+                "generation": "cloud", "retrieval": "Qdrant + FlashRank",
+                "bundled_document_count": bundled.get("document_count", 0),
+                "bundled_reference_document_count": bundled.get("reference_document_count", 0),
+                "bundled_chunk_count": bundled.get("chunk_count", 0),
+                **remote,
+            }
         stats = dict(self.local_engine().health())
         if stats.get("document_count", 0) < 1 or stats.get("chunk_count", 0) < 1:
             raise RuntimeUnavailable(
@@ -102,8 +152,6 @@ class RAGRuntime:
                 "folder or ingest documents before starting the application."
             )
         stats.update(status="ready", mode=self.mode)
-        if self.mode == "cloud":
-            stats.update(credentials_required=True, generation="cloud", retrieval="Qdrant + FlashRank")
         return stats
 
     def documents(self, scope="all"):
@@ -112,10 +160,55 @@ class RAGRuntime:
     def document(self, document_id):
         return self.local_engine().document(document_id)
 
+    def _local_query(self, q, *, thread_id, scope, top_k):
+        engine = self.local_engine()
+        # Store only the last supported question, never document text or generated
+        # answers. A scope change must not reuse evidence from a different scope.
+        key = (thread_id, scope) if isinstance(thread_id, str) and 0 < len(thread_id) <= 128 else None
+        question = str(q).strip()
+        followup = _LOCAL_FOLLOWUP.match(question)
+        with self._context_lock:
+            now = monotonic()
+            for expired in [context_key for context_key, (timestamp, _) in self._local_context.items()
+                            if now - timestamp >= _LOCAL_CONTEXT_TTL]:
+                del self._local_context[expired]
+            previous = self._local_context.get(key) if key else None
+            resolved = question
+            if followup:
+                if previous is None:
+                    result = engine.query("", scope=scope, top_k=top_k)
+                    result["answer"] = "Please name the subject of your question so I can find supporting document excerpts."
+                    result.update(status="no_answer", sources=[], citations=[])
+                    result["thought_process"] = ["No supported conversation subject is available in this thread and search scope."]
+                    return result
+                start, end = followup.span(followup.lastgroup)
+                resolved = question[:start] + "(" + previous[1] + ")" + question[end:]
+            result = engine.query(resolved, scope=scope, top_k=top_k)
+            if followup and previous:
+                result["thought_process"] = [
+                    "Resolved the follow-up using the previous supported question in this thread and search scope."
+                ] + list(result.get("thought_process", []))
+            if key:
+                if result.get("citations") and result.get("status") != "no_answer" and len(question) <= 2000:
+                    # Repeated follow-ups retain their original anchor, so the
+                    # stored question and future retrieval requests cannot grow.
+                    # Retain subject and intent, but remove request wrappers
+                    # before embedding the anchor inside a later follow-up.
+                    anchor = previous[1] if followup and previous else normalize_question(question)
+                    self._local_context[key] = (now, anchor)
+                    self._local_context.move_to_end(key)
+                    while len(self._local_context) > _LOCAL_CONTEXT_LIMIT:
+                        self._local_context.popitem(last=False)
+                else:
+                    # An unsupported independent question changes the topic too;
+                    # a later pronoun must not silently revive an older subject.
+                    self._local_context.pop(key, None)
+            return result
+
     def query(self, q, *, thread_id, scope="reference", top_k=4):
         self._check_mode()
         if self.mode == "local":
-            return self.local_engine().query(q, scope=scope, top_k=top_k)
+            return self._local_query(q, thread_id=thread_id, scope=scope, top_k=top_k)
         agent, guard = self.cloud_components()
         rail_fired, rail_response = guard(q)
         if rail_fired:

@@ -8,7 +8,9 @@ from rag.services.retrieval.embedding_service import embed_query
 # Initialize Qdrant Client
 client = QdrantClient(
     url=settings.QDRANT_URL,
-    api_key=settings.QDRANT_API_KEY
+    api_key=settings.QDRANT_API_KEY,
+    timeout=3,
+    check_compatibility=False,
 )
 
 def search_rag_knowledge(query: str, limit: int = 8, scope: str = "all"):

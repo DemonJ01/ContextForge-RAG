@@ -5,12 +5,13 @@ import time
 from threading import Lock
 
 import logfire
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from rag.settings import settings
 
 BATCH_SIZE = 50
 _GEMINI_DIM = 3072
 _LOCAL_DIM = 768  # all-mpnet-base-v2
+_DEFAULT_GEMINI_MODEL = "models/gemini-embedding-2-preview"
+_GEMINI_MODELS = {"gemini-embedding-2-preview", "gemini-embedding-2", "gemini-embedding-001"}
 
 _active_model = None
 _model_type: str | None = None
@@ -26,20 +27,68 @@ def _validate_vectors(vectors, count, dimension):
     return vectors
 
 
+class _GeminiEmbeddings:
+    """Text-only GenAI adapter that respects each Gemini model's API contract.
+
+    Separate Content objects keep document embeddings separate. Passing a list
+    of text parts in one Content would aggregate Embedding 2 inputs into one
+    vector. Raw text is preserved so the default retains its existing space.
+    """
+
+    def __init__(self, model_name):
+        # Import only when Gemini is selected. HuggingFace embeddings do not
+        # need either the Google SDK or the LangChain Google integration.
+        from google import genai
+        from google.genai import types
+
+        self.model_name = model_name
+        self._types = types
+        self._client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+    def _embed(self, texts, task_type):
+        request = {
+            "model": self.model_name,
+            "contents": [self._types.Content(parts=[self._types.Part.from_text(text=text)]) for text in texts],
+        }
+        if self.model_name.removeprefix("models/") == "gemini-embedding-001":
+            request["config"] = self._types.EmbedContentConfig(task_type=task_type)
+        # Embedding 2 rejects task_type. Do not introduce retrieval prompt
+        # prefixes here: that would silently change existing indexed vectors.
+        response = self._client.models.embed_content(**request)
+        vectors = [list(embedding.values) for embedding in (response.embeddings or [])]
+        return _validate_vectors(vectors, len(texts), _GEMINI_DIM)
+
+    def embed_query(self, query):
+        return self._embed([query], "RETRIEVAL_QUERY")[0]
+
+    def embed_documents(self, texts):
+        return self._embed(texts, "RETRIEVAL_DOCUMENT")
+
+
 def _load_gemini():
     if not (settings.GEMINI_API_KEY or "").strip():
         raise RuntimeError("Gemini embeddings require GEMINI_API_KEY. Configure it before indexing or querying.")
-    try:
-        model = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-2-preview",
-            google_api_key=settings.GEMINI_API_KEY,
+    model_name = os.getenv("RAG_GEMINI_EMBEDDING_MODEL", _DEFAULT_GEMINI_MODEL).strip()
+    if model_name.removeprefix("models/") not in _GEMINI_MODELS:
+        raise RuntimeError(
+            "RAG_GEMINI_EMBEDDING_MODEL must be gemini-embedding-2-preview, "
+            "gemini-embedding-2, or gemini-embedding-001 (optionally prefixed with models/). "
+            "Changing the model requires re-ingesting documents into a separate Qdrant collection."
         )
+    try:
+        model = _GeminiEmbeddings(model_name)
         _validate_vectors([model.embed_query("probe")], 1, _GEMINI_DIM)
         return model
+    except ImportError as exc:
+        raise RuntimeError(
+            "Gemini embeddings require the google-genai package. Install requirements-cloud.txt; "
+            "the embedding backend was not changed."
+        ) from exc
     except Exception as exc:
         raise RuntimeError(
-            "Gemini embeddings could not be initialized. Check GEMINI_API_KEY, model access, "
-            "and connectivity. The embedding backend was not changed."
+            f"Gemini embeddings ({model_name}) could not be initialized. Check GEMINI_API_KEY, "
+            "model access, and connectivity. The embedding backend was not changed. "
+            "Changing RAG_GEMINI_EMBEDDING_MODEL requires re-ingesting documents into a separate Qdrant collection."
         ) from exc
 
 

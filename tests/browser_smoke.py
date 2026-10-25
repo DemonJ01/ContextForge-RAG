@@ -9,6 +9,11 @@ OUT.mkdir(exist_ok=True)
 checks=[]
 errors=[]
 failed_requests=[]
+expected_interrupted_requests=set()
+
+def request_failed(request):
+    if request not in expected_interrupted_requests:
+        failed_requests.append({'url':request.url,'failure':request.failure})
 
 def record(name, details=True): checks.append({'check':name,'result':details})
 
@@ -22,7 +27,7 @@ with sync_playwright() as p:
     context=browser.new_context(viewport={'width':1440,'height':960}, permissions=['clipboard-read','clipboard-write'])
     page=context.new_page()
     page.on('pageerror', lambda error:errors.append(str(error)))
-    page.on('requestfailed',lambda request:failed_requests.append({'url':request.url,'failure':request.failure}))
+    page.on('requestfailed',request_failed)
     page.goto(BASE,wait_until='networkidle')
     expect(page.locator('#connection-label')).to_have_text('Local · extractive')
     expect(page.locator('#library-count')).to_have_text('11')
@@ -165,6 +170,39 @@ with sync_playwright() as p:
     expect(page.locator('.pending-message')).to_have_count(0)
     expect(page.locator('.message-answer .answer-content')).to_have_count(1)
     record('completed_query_visible_after_library_navigation')
+    # Reloading an in-flight search must leave an explicit, durable retry.
+    page.locator('#new-chat').click()
+    page.locator('#scope').select_option('all')
+    page.route('**/query',hold_query)
+    page.locator('#question').fill('How do Kubernetes CronJobs work?')
+    page.locator('#send-button').click()
+    expect(page.locator('.pending-message')).to_be_visible()
+    pending_request=held_queries[-1].request
+    expected_interrupted_requests.add(pending_request)
+    pending_snapshot=page.evaluate("JSON.parse(localStorage.getItem('rag.workspace.v1')).pending")
+    assert pending_snapshot['question']=='How do Kubernetes CronJobs work?'
+    assert pending_snapshot['scope']=='all' and pending_snapshot['messageIndex']==1
+    query_count=len(held_queries)
+    page.close()
+    page=context.new_page()
+    page.on('pageerror', lambda error:errors.append(str(error)))
+    page.on('requestfailed',request_failed)
+    page.goto(BASE,wait_until='networkidle')
+    expect(page.locator('.pending-message')).to_have_count(0)
+    expect(page.locator('.error-message')).to_have_count(1)
+    expect(page.locator('.error-message')).to_contain_text('interrupted')
+    expect(page.locator('.error-message').get_by_role('button',name='Try again',exact=True)).to_be_enabled()
+    assert len(held_queries)==query_count, 'Interrupted queries must wait for an explicit retry.'
+    assert page.evaluate("JSON.parse(localStorage.getItem('rag.workspace.v1')).pending") is None
+    page.reload(wait_until='networkidle')
+    expect(page.locator('.error-message')).to_have_count(1)
+    with page.expect_response(lambda response: response.url.endswith('/query')) as restored_retry:
+        page.locator('.error-message').get_by_role('button',name='Try again',exact=True).click()
+    assert restored_retry.value.status==200
+    assert restored_retry.value.request.post_data_json['scope']=='all'
+    expect(page.locator('.error-message')).to_have_count(0)
+    expect(page.locator('.message-answer')).to_have_count(1)
+    record('interrupted_query_tab_close_and_explicit_retry')
     # Retrying an earlier error keeps its result beside the original question.
     page.locator('#new-chat').click()
     page.locator('#scope').select_option('all')
@@ -232,6 +270,19 @@ with sync_playwright() as p:
     expect(page.locator('#empty-state')).to_be_visible()
     expect(page.locator('#conversation-list .history-item')).to_have_count(0)
     record('clear_browser_history')
+    # A stale ready badge must recover when focus/reconnect checks fail or resume.
+    def unavailable_health(route):
+        route.fulfill(status=503,content_type='application/json',body=json.dumps({'detail':'Server unavailable during recovery verification.'}))
+    page.route('**/health',unavailable_health)
+    with page.expect_response(lambda response: response.url.endswith('/health')):
+        page.evaluate("window.dispatchEvent(new Event('focus'))")
+    expect(page.locator('#connection-label')).to_have_text('Workspace unavailable')
+    expect(page.locator('#refresh-connection')).to_be_enabled()
+    page.unroute('**/health',unavailable_health)
+    with page.expect_response(lambda response: response.url.endswith('/health')):
+        page.evaluate("window.dispatchEvent(new Event('online'))")
+    expect(page.locator('#connection-label')).to_have_text('Local · extractive')
+    record('connection_rechecks_on_focus_and_reconnect')
     # Exercise cloud UI request contracts without contacting any providers.
     cloud_queries=[]
     def cloud_health(route):

@@ -75,6 +75,10 @@ def create_app(project_root: Optional[Path] = None, runtime: Optional[RAGRuntime
     def health():
         return execute(runtime.health)
 
+    @app.get("/configuration")
+    def configuration():
+        return execute(runtime.configuration)
+
     @app.get("/documents")
     def documents(scope: Scope = "all"):
         items = execute(lambda: runtime.documents(scope=scope))

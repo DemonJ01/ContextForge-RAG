@@ -5,6 +5,7 @@ requests
 numpy
 pytz
 google-generativeai
+google-genai
 langchain-google-genai
 qdrant-client
 flashrank
