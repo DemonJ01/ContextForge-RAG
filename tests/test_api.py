@@ -167,7 +167,7 @@ class RuntimeModeTests(unittest.TestCase):
         self.assertIn("RAG_MODE=local", response.json()["detail"])
         self.assertEqual(runtime._local_engine.queries, [])
 
-    def test_cloud_legacy_flow_uses_request_thread_and_preserves_response(self):
+    def test_cloud_flow_uses_scoped_checkpoint_and_preserves_response(self):
         class Agent:
             def invoke(self, state, config):
                 self.state = state
@@ -181,10 +181,50 @@ class RuntimeModeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["mode"], "cloud")
         self.assertEqual(response.json()["sources"], ["Evidence"])
-        self.assertEqual(agent.config["configurable"]["thread_id"], "unique123")
+        self.assertEqual(response.json()["thread_id"], "unique123")
+        checkpoint_id = agent.config["configurable"]["thread_id"]
+        self.assertNotEqual(checkpoint_id, "unique123")
+        self.assertTrue(0 < len(checkpoint_id) <= 128)
         self.assertEqual(agent.state["messages"], [{"role": "user", "content": "How do jobs work?"}])
         self.assertEqual(agent.state["scope"], "all")
         self.assertEqual(agent.state["top_k"], 2)
+
+    def test_cloud_checkpoint_history_is_stable_and_isolated_by_thread_and_scope(self):
+        class MemoryAgent:
+            def __init__(self):
+                self.history = {}
+                self.checkpoint_ids = []
+
+            def invoke(self, state, config):
+                checkpoint_id = config["configurable"]["thread_id"]
+                self.checkpoint_ids.append(checkpoint_id)
+                history = self.history.setdefault(checkpoint_id, [])
+                answer = "Previous question: " + history[-1] if history else "No previous question."
+                history.append(state["messages"][-1]["content"])
+                return {"current_query": "CONVERSATIONAL", "final_answer": answer,
+                        "documents": [], "plan": ["Retrieval: Skipped"], "status": "Response generated."}
+
+        runtime = RAGRuntime(PROJECT_ROOT, mode="cloud")
+        agent = MemoryAgent()
+        runtime._cloud_components = (agent, lambda q: (False, None))
+        public_thread = "a" * 128
+        with TestClient(create_app(runtime=runtime)) as client:
+            def ask(question, scope="all", thread=public_thread):
+                response = client.post("/query", json={"q": question, "thread_id": thread, "scope": scope})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["thread_id"], thread)
+                return response.json()["answer"]
+
+            self.assertEqual(ask("An all-documents subject"), "No previous question.")
+            self.assertEqual(ask("What did we discuss?", scope="reference"), "No previous question.")
+            self.assertEqual(ask("Explain that again"), "Previous question: An all-documents subject")
+            self.assertEqual(ask("What about that?", scope="reference"), "Previous question: What did we discuss?")
+            self.assertEqual(ask("What did we discuss?", thread="another-thread"), "No previous question.")
+        first_all, first_reference, next_all, next_reference, another_thread = agent.checkpoint_ids
+        self.assertEqual(first_all, next_all)
+        self.assertEqual(first_reference, next_reference)
+        self.assertEqual(len({first_all, first_reference, another_thread}), 3)
+        self.assertTrue(all(0 < len(key) <= 128 for key in agent.checkpoint_ids))
 
     def test_cloud_local_embeddings_do_not_require_a_gemini_key(self):
         environment = {name: "test-value" for name in (

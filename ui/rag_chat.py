@@ -45,6 +45,19 @@ AI_AVATAR = "🤖"
 USER_AVATAR = "👤"
 
 
+def _render_sources(message):
+    sources = message.get("sources", [])
+    if sources:
+        with st.expander(f"📄 Retrieved Context ({len(sources)} chunks)"):
+            for i, source in enumerate(sources):
+                st.caption(f"Chunk {i + 1}")
+                st.info(source)
+    elif message.get("status") == "no_answer":
+        st.caption("ℹ️ No supporting evidence was found in the indexed documents.")
+    else:
+        st.caption("ℹ️ This response has no retrieved source passages.")
+
+
 # --- SESSION MANAGEMENT ---
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
@@ -76,6 +89,8 @@ for message in st.session_state.messages:
     avatar = AI_AVATAR if message["role"] == "assistant" else USER_AVATAR
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
+        if message["role"] == "assistant":
+            _render_sources(message)
 
 # Chat Input
 if prompt := st.chat_input("Ask about your documentation..."):
@@ -106,15 +121,6 @@ if prompt := st.chat_input("Ask about your documentation..."):
                     
                     status.update(label="✅ Answer Synthesized", state="complete", expanded=False)
                     
-                    # --- SHOW SOURCES (NESTED EXPANDABLES) ---
-                    sources = data.get("sources", [])
-                    if sources:
-                        with st.expander("📄 View Retrieved Context (Sources)"):
-                            for i, source in enumerate(sources):
-                                # Create a preview title for each chunk
-                                preview = source[:100].replace("\n", " ") + "..."
-                                with st.expander(f"Chunk {i+1}: {preview}"):
-                                    st.info(source)
                 except requests.Timeout:
                     status.update(label="❌ Search timed out", state="error")
                     st.error("The search timed out. Please try again; cloud models may take longer on their first request.")
@@ -144,5 +150,10 @@ if prompt := st.chat_input("Ask about your documentation..."):
                 time.sleep(0.005)
             
             answer_placeholder.markdown(full_answer)
-            st.session_state.messages.append({"role": "assistant", "content": full_answer})
+            assistant_message = {
+                "role": "assistant", "content": full_answer,
+                "sources": data.get("sources", []), "status": data.get("status", ""),
+            }
+            _render_sources(assistant_message)
+            st.session_state.messages.append(assistant_message)
             logfire.info("✅ Chat cycle completed successfully.")

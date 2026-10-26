@@ -81,7 +81,7 @@ def configuration_status(mode, environment=None):
         "cloud_configuration_ready": embedding["valid"] and not missing and not missing_packages,
         "provider_authentication": "not_checked",
         "remote_index": "not_checked",
-        "authentication": "Provider API keys are configured on the server. This app has no user login.",
+        "authentication": "Cloud providers require API keys in the server configuration. This app has no user login.",
         "steps": steps,
     }
 

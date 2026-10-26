@@ -462,7 +462,7 @@
     }
     $("configuration-summary").textContent = configuration.cloud_configuration_ready
       ? "Cloud setup configured · provider access unverified" : "Cloud setup needs attention";
-    content.append(element("p", "", `Server mode: ${configuration.configured_mode}. Embeddings: ${configuration.embedding_backend} · ${configuration.embedding_model}.`));
+    content.append(element("p", "", `Server mode: ${configuration.configured_mode}. Cloud embedding configuration: ${configuration.embedding_backend} · ${configuration.embedding_model}.`));
     content.append(element("p", "", configuration.authentication));
     const missingVariables = configuration.missing_environment_variables;
     const missingPackages = configuration.missing_cloud_packages;
@@ -561,7 +561,9 @@
     const filter = $("document-filter").value;
     const documents = state.documents.filter((doc) => (!query || `${doc.title} ${doc.filename}`.toLowerCase().includes(query))
       && (filter === "all" || (filter === "reference" ? doc.source_type === "true" : doc.source_type !== "true")));
-    $("library-total").textContent = `${documents.length}${documents.length === state.documents.length ? "" : ` of ${state.documents.length}`} document${documents.length === 1 ? "" : "s"}`;
+    $("library-total").textContent = documents.length === state.documents.length
+      ? `${documents.length} document${documents.length === 1 ? "" : "s"}`
+      : `${documents.length} of ${state.documents.length} documents`;
     if (!documents.length) {
       const empty = element("div", "library-empty");
       empty.append(icon("search"), element("h2", "", "A different starting point?"), element("p", "", "No documents match these filters. Try a title, topic, or a different collection."));

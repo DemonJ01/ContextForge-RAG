@@ -62,6 +62,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(data["required_environment_variables"], data["missing_environment_variables"])
         self.assertIn("qdrant-client", data["missing_cloud_packages"])
         self.assertFalse(data["cloud_configuration_ready"])
+        self.assertNotIn("keys are configured", data["authentication"])
         self.assertTrue(any("requirements-cloud.txt" in step for step in data["steps"]))
         self.assertTrue(any("RAG_MODE=cloud" in step for step in data["steps"]))
 

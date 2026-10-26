@@ -32,6 +32,20 @@ st.set_page_config(
 AI_AVATAR = "🤖"
 USER_AVATAR = "👤"
 
+
+def _render_sources(message):
+    sources = message.get("sources", [])
+    if sources:
+        with st.expander(f"📄 Retrieved Context ({len(sources)} chunks)"):
+            for i, source in enumerate(sources):
+                st.caption(f"Chunk {i + 1}")
+                st.info(source)
+    elif message.get("status") == "no_answer":
+        st.caption("ℹ️ No supporting evidence was found in the indexed documents.")
+    else:
+        st.caption("ℹ️ This response has no retrieved source passages.")
+
+
 # --- SESSION MANAGEMENT ---
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
@@ -69,6 +83,8 @@ for message in st.session_state.messages:
     avatar = AI_AVATAR if message["role"] == "assistant" else USER_AVATAR
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
+        if message["role"] == "assistant":
+            _render_sources(message)
 
 # Chat Input
 if prompt := st.chat_input("Ask about your documentation..."):
@@ -126,17 +142,10 @@ if prompt := st.chat_input("Ask about your documentation..."):
                 time.sleep(0.005)
             answer_placeholder.markdown(full_answer)
 
-            # Sources — outside status so they're visible after it collapses
-            sources = data.get("sources", [])
-            if sources:
-                with st.expander(f"📄 Retrieved Context ({len(sources)} chunks)"):
-                    for i, source in enumerate(sources):
-                        st.caption(f"Chunk {i + 1}")
-                        st.info(source)
-            elif data.get("status") == "no_answer":
-                st.caption("ℹ️ No supporting evidence was found in the indexed documents.")
-            else:
-                st.caption("ℹ️ This response has no retrieved source passages.")
-
-            st.session_state.messages.append({"role": "assistant", "content": full_answer})
+            assistant_message = {
+                "role": "assistant", "content": full_answer,
+                "sources": data.get("sources", []), "status": data.get("status", ""),
+            }
+            _render_sources(assistant_message)
+            st.session_state.messages.append(assistant_message)
             logfire.info("✅ Chat cycle completed successfully.")

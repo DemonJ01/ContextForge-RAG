@@ -6,6 +6,7 @@ import logging
 import os
 import re
 from collections import OrderedDict
+from hashlib import sha256
 from pathlib import Path
 from threading import Lock
 from time import monotonic
@@ -228,7 +229,12 @@ class RAGRuntime:
             "plan": ["Start"],
             "status": "Initializing Graph...",
         }
-        result = agent.invoke(initial_state, config={"configurable": {"thread_id": thread_id}})
+        # LangGraph checkpoints include conversation history and retrieved text.
+        # Keep each search scope in its own history, including conversational
+        # follow-ups that the planner routes around retrieval. The public API
+        # continues to return the caller's original thread ID.
+        checkpoint_id = "rag-cloud-" + sha256(f"{scope}\0{thread_id}".encode("utf-8")).hexdigest()
+        result = agent.invoke(initial_state, config={"configurable": {"thread_id": checkpoint_id}})
         raw_documents = result.get("documents")
         sources = []
         for document in raw_documents if isinstance(raw_documents, (list, tuple)) else []:

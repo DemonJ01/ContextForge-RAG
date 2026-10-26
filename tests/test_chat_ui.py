@@ -59,7 +59,7 @@ class QueryResponseTests(unittest.TestCase):
 @unittest.skipUnless(importlib.util.find_spec("streamlit") is not None,
                      "optional Streamlit dependency is not installed")
 class LegacyChatRenderingTests(unittest.TestCase):
-    def run_chat(self, filename, result=None, error=None):
+    def run_chat(self, filename, result=None, error=None, after_response=None):
         from streamlit.testing.v1 import AppTest
 
         telemetry = ModuleType("logfire")
@@ -76,6 +76,8 @@ class LegacyChatRenderingTests(unittest.TestCase):
                 patch("time.sleep", side_effect=animation_sleep):
             app = AppTest.from_file(str(ROOT / filename), default_timeout=20).run()
             app.chat_input[0].set_value("How do Kubernetes CronJobs work?").run(timeout=20)
+            if after_response:
+                after_response(app)
         self.assertEqual(len(app.exception), 0)
         return app
 
@@ -89,6 +91,34 @@ class LegacyChatRenderingTests(unittest.TestCase):
                 self.assertEqual(len(app.error), 0)
                 self.assertIn("The supporting source passage.", [entry.value for entry in app.info])
                 self.assertEqual(app.session_state["messages"][-1]["role"], "assistant")
+
+    def test_sources_persist_when_chat_history_is_redrawn(self):
+        for filename in ("ui/rag_chat.py", "ui/rag_chat_cloud.py"):
+            with self.subTest(filename=filename):
+                app = self.run_chat(filename, response(200, {
+                    "answer": "CronJobs create Jobs on a schedule. [1]", "status": "complete",
+                    "sources": ["The supporting source passage."], "thought_process": [],
+                }), after_response=lambda app: app.run(timeout=20))
+                self.assertIn("The supporting source passage.", [entry.value for entry in app.info])
+                self.assertEqual(app.session_state["messages"][-1]["sources"],
+                                 ["The supporting source passage."])
+
+    def test_clear_removes_answers_and_sources_and_rotates_thread(self):
+        previous_threads = []
+
+        def clear(app):
+            previous_threads.append(app.session_state["session_id"])
+            app.button[0].click().run(timeout=20)
+
+        for filename in ("ui/rag_chat.py", "ui/rag_chat_cloud.py"):
+            with self.subTest(filename=filename):
+                app = self.run_chat(filename, response(200, {
+                    "answer": "A sourced answer. [1]", "status": "complete",
+                    "sources": ["The supporting source passage."], "thought_process": [],
+                }), after_response=clear)
+                self.assertEqual(app.session_state["messages"], [])
+                self.assertNotEqual(app.session_state["session_id"], previous_threads[-1])
+                self.assertNotIn("The supporting source passage.", [entry.value for entry in app.info])
 
     def test_http_failures_are_actionable_in_both_entrypoints(self):
         cases = [(503, {"detail": "Configure PORTKEY_API_KEY or use RAG_MODE=local."}, "PORTKEY_API_KEY"),
@@ -115,12 +145,14 @@ class LegacyChatRenderingTests(unittest.TestCase):
                     self.assertNotIn("PRIVATE_URL", app.error[0].value)
 
     def test_no_evidence_response_is_not_labeled_conversational(self):
-        app = self.run_chat("ui/rag_chat_cloud.py", response(200, {
-            "answer": "I couldn't find enough evidence.", "status": "no_answer", "sources": [],
-        }))
-        self.assertEqual(len(app.error), 0)
-        self.assertIn("No supporting evidence", app.caption[0].value)
-        self.assertNotIn("conversational", app.caption[0].value)
+        for filename in ("ui/rag_chat.py", "ui/rag_chat_cloud.py"):
+            with self.subTest(filename=filename):
+                app = self.run_chat(filename, response(200, {
+                    "answer": "I couldn't find enough evidence.", "status": "no_answer", "sources": [],
+                }), after_response=lambda app: app.run(timeout=20))
+                self.assertEqual(len(app.error), 0)
+                self.assertIn("No supporting evidence", app.caption[0].value)
+                self.assertNotIn("conversational", app.caption[0].value)
 
 
 if __name__ == "__main__":

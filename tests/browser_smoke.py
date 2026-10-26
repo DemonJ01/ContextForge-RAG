@@ -35,6 +35,24 @@ with sync_playwright() as p:
     no_overflow(page,'desktop_empty')
     page.screenshot(path=str(OUT/'rag-desktop.png'),full_page=False,animations='disabled')
     record('live_connection_and_real_index_counts')
+    # Connection details distinguish the active local engine from optional
+    # cloud configuration, and the refresh/close controls remain usable.
+    page.locator('#connection-button').click()
+    expect(page.locator('#connection-dialog')).to_be_visible()
+    expect(page.locator('#connection-description')).to_contain_text('no language model')
+    configuration=context.request.get(BASE+'/configuration')
+    assert configuration.status==200
+    configured=configuration.json()
+    page.locator('#configuration-summary').click()
+    expect(page.locator('#configuration-content')).to_contain_text('Cloud embedding configuration:')
+    expect(page.locator('#configuration-content')).to_contain_text(configured['embedding_model'])
+    assert 'keys are configured' not in page.locator('#configuration-content').inner_text()
+    with page.expect_response(lambda response: response.url.endswith('/configuration')):
+        page.locator('#refresh-connection').click()
+    expect(page.locator('#refresh-connection')).to_be_enabled()
+    page.locator('#close-connection').click()
+    expect(page.locator('#connection-dialog')).not_to_be_visible()
+    record('connection_dialog_model_configuration_refresh_and_close')
     # Shift+Enter leaves a draft, Enter submits once to the real API.
     question=page.locator('#question')
     question.fill('How do Kubernetes CronJobs work?')
@@ -69,6 +87,7 @@ with sync_playwright() as p:
     expect(page.locator('#document-list .document-row')).to_have_count(6)
     page.locator('#document-search').fill('Databricks')
     expect(page.locator('#document-list .document-row')).to_have_count(1)
+    expect(page.locator('#library-total')).to_have_text('1 of 11 documents')
     page.locator('#document-list .document-row').click()
     expect(page.locator('#document-content')).to_contain_text('Databricks CLI')
     page.keyboard.press('Escape')
@@ -76,6 +95,9 @@ with sync_playwright() as p:
     expect(page.get_by_role('button',name='Reset filters',exact=True)).to_be_visible()
     page.get_by_role('button',name='Reset filters',exact=True).click()
     expect(page.locator('#document-list .document-row')).to_have_count(11)
+    page.locator('#document-filter').select_option('extended')
+    expect(page.locator('#document-list .document-row')).to_have_count(5)
+    page.locator('#document-filter').select_option('all')
     record('library_filter_search_details_and_empty_recovery')
     # New conversation and persisted browser-local history.
     page.locator('#new-chat').click()
@@ -263,7 +285,54 @@ with sync_playwright() as p:
     expect(page.locator('.error-message')).to_have_count(0)
     expect(page.locator('.message-answer')).to_have_count(3)
     record('retry_recovers_after_background_conversation_finishes')
+    # The real UI must preserve drafts across conversation switches/reloads.
+    page.locator('#question').fill('Unsent draft for this conversation')
+    page.locator('#new-chat').click()
+    page.locator('#question').fill('Unsent new-conversation draft')
+    page.locator('#conversation-list .history-item').first.click()
+    expect(page.locator('#question')).to_have_value('Unsent draft for this conversation')
+    page.reload(wait_until='networkidle')
+    expect(page.locator('#question')).to_have_value('Unsent draft for this conversation')
+    record('conversation_draft_survives_switch_and_reload')
+    # Each starter button submits its displayed topic and returns cited text.
+    starter_questions=[
+        'How do Kubernetes CronJobs work?',
+        'What is the difference between horizontal and vertical pod autoscaling?',
+        'How do I set up a parallel work queue with Redis in Kubernetes?',
+    ]
+    for index,starter in enumerate(starter_questions):
+        page.locator('#new-chat').click()
+        with page.expect_response(lambda response: response.url.endswith('/query')) as suggested:
+            page.locator('.suggestion').nth(index).click()
+        assert suggested.value.request.post_data_json['q']==starter
+        suggested_result=suggested.value.json()
+        assert suggested_result['status']=='complete' and suggested_result['citations']
+        expect(page.locator('.answer-content')).to_have_count(1)
+    record('all_starter_buttons_return_real_cited_answers')
+    # Scope changes use the chosen collection rather than reusing old evidence.
+    page.locator('#new-chat').click()
+    page.locator('#scope').select_option('all')
+    page.locator('#question').fill('Intel 5 level paging EPT')
+    with page.expect_response(lambda response: response.url.endswith('/query')) as extended:
+        page.locator('#send-button').click()
+    extended_result=extended.value.json()
+    assert extended_result['status']=='complete' and extended_result['citations']
+    assert all(citation['source_type']=='noisy' for citation in extended_result['citations'])
+    expect(page.locator('.answer-content')).to_have_count(1)
+    page.locator('#scope').select_option('reference')
+    page.locator('#question').fill('Intel 5 level paging EPT')
+    with page.expect_response(lambda response: response.url.endswith('/query')) as scoped:
+        page.locator('#send-button').click()
+    scoped_result=scoped.value.json()
+    assert scoped_result['status']=='no_answer' and scoped_result['citations']==[]
+    record('extended_library_results_and_reference_scope_exclusion')
     # Only this fresh browser context's test history is removed.
+    page.locator('#clear-history').click()
+    expect(page.locator('#clear-dialog')).to_be_visible()
+    saved_count=page.locator('#conversation-list .history-item').count()
+    page.locator('#cancel-clear').click()
+    expect(page.locator('#clear-dialog')).not_to_be_visible()
+    expect(page.locator('#conversation-list .history-item')).to_have_count(saved_count)
     page.locator('#clear-history').click()
     expect(page.locator('#clear-dialog')).to_be_visible()
     page.locator('#confirm-clear').click()

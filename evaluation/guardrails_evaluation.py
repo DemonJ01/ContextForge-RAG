@@ -49,7 +49,15 @@ def run_guardrails_eval(guardrails_samples: list, progress_callback=None) -> lis
                         timeout=30,
                     )
                     resp.raise_for_status()
-                    blocked = _is_blocked(resp.json())
+                    data = resp.json()
+                    if not isinstance(data, dict) or data.get("status") == "error":
+                        raise ValueError("The backend returned an unsuccessful query.")
+                    if not isinstance(data.get("answer"), str) or not data["answer"].strip():
+                        raise ValueError("The backend returned no answer text.")
+                    trace = data.get("thought_process")
+                    if not isinstance(trace, list) or not all(isinstance(step, str) for step in trace):
+                        raise ValueError("The backend returned invalid guardrail routing information.")
+                    blocked = _is_blocked(data)
 
                 except requests.exceptions.ConnectionError:
                     logfire.error("❌ Cannot reach FastAPI — is the app running on :8000?")

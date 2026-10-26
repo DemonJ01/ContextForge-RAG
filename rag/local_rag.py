@@ -62,6 +62,10 @@ _CHUNK_OVERLAP = 160
 _DEFINITION_HEADING = re.compile(r"(?im)^what (?:is|are) ([^?\n]{1,80})")
 _DEFINITION_SENTENCE = re.compile(
     r"(?im)^(?:a |an |the )?([a-z0-9][a-z0-9 ()/'_-]{0,79}?)\s+(?:is|are)\s+")
+_DEFINITION_DASH = re.compile(
+    r"(?im)^([a-z0-9][a-z0-9 ()/'_-]{0,79}?)\s*[-–—]\s+\S")
+_SUBJECT_HEADING = re.compile(
+    r"(?m)^([A-Za-z][A-Za-z0-9 /_-]{0,79})[ \t]*\n([^\n]+)")
 
 
 def _tokenize(text: str, *, split_identifiers: bool = False) -> list[str]:
@@ -164,16 +168,63 @@ def _one_edit_apart(left: str, right: str) -> bool:
 
 def _definition_start(text: str, terms: set[str], *, headings_only: bool = False) -> int | None:
     """Locate a heading that defines the whole subject, allowing its platform name."""
-    patterns = (_DEFINITION_HEADING,) if headings_only else (_DEFINITION_HEADING, _DEFINITION_SENTENCE)
+    patterns = ((_DEFINITION_HEADING,) if headings_only else
+                (_DEFINITION_HEADING, _DEFINITION_SENTENCE, _DEFINITION_DASH))
     for pattern in patterns:
         for match in pattern.finditer(text):
-            heading_terms = set(_tokenize(match.group(1), split_identifiers=True))
+            heading_terms = _heading_terms(match.group(1))
+            if pattern is _DEFINITION_DASH and not heading_terms <= terms | {"kubernetes", "databricks"}:
+                continue
             # Parser chunks can end with a heading whose definition starts in
             # the next chunk. An isolated heading is not a useful definition.
             if (text[match.end():].strip("? \t\r\n") and terms & heading_terms
                     and terms <= heading_terms | {"kubernetes", "databricks"}):
                 return match.start()
+    for match in _SUBJECT_HEADING.finditer(text):
+        heading_terms = _heading_terms(match[1])
+        # A short named heading followed by a full explanatory sentence is
+        # useful evidence; an agenda or a list of component names is not.
+        if (terms & heading_terms and terms <= heading_terms | {"kubernetes", "databricks"}
+                and heading_terms <= terms | {"kube"}
+                and len(re.findall(r"[A-Za-z0-9]+", match[2])) >= 9
+                and re.match(r"(?:acts?\b|manages?\b|ensures?\b|provides?\b|"
+                             r"automatically\b|[A-Za-z0-9_-]+\s+(?:is|are|monitors?)\b)",
+                             match[2].strip(), re.IGNORECASE)):
+            return match.start()
     return None
+
+
+def _heading_terms(text: str) -> set[str]:
+    terms = set(_tokenize(text, split_identifiers=True))
+    for word in re.findall(r"[A-Za-z0-9]+", text):
+        spaced = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", word)
+        if spaced != word:
+            parts = set(_tokenize(spaced))
+            if parts and parts != {word.lower()}:
+                terms.difference_update(_tokenize(word, split_identifiers=True))
+                terms.update(parts)
+    return terms
+
+
+def _field_value_matches(text: str, field_terms: set[str], value: str) -> bool:
+    """Find a value attached to its field, including a short prose value list."""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        line_terms = set(_tokenize(line, split_identifiers=True))
+        if not field_terms <= line_terms:
+            continue
+        if value in line_terms:
+            return True
+        # A populated YAML assignment belongs only to its own value. A named
+        # heading can introduce explanatory values on the following lines.
+        if (re.search(r":\s*\S", line) or len(line_terms) > 8):
+            continue
+        for following in lines[index + 1:index + 8]:
+            if not following.strip() or re.match(r"\s*\d+\.\s", following):
+                break
+            if value in _tokenize(following, split_identifiers=True):
+                return True
+    return False
 
 
 def _split_text(text: str) -> list[str]:
@@ -221,6 +272,7 @@ class LocalRAG:
         self._document_terms: dict[str, set[str]] = {}
         self._document_vocabulary: dict[str, set[str]] = {}
         self._frequencies: Counter = Counter()
+        identifier_parts: dict[str, set[tuple[str, ...]]] = {}
         for path in sorted((self.project_root / "processed_documents").glob("*/*.json")):
             data = json.loads(path.read_text(encoding="utf-8"))
             filename = str(data["filename"])
@@ -247,10 +299,19 @@ class LocalRAG:
             self._document_terms[document_id] = set(_tokenize(title + " " + first_line))
             self._document_vocabulary[document_id] = set(_tokenize(
                 "\n".join(raw_chunks), split_identifiers=True))
+            for word in re.findall(r"[A-Za-z0-9]+", "\n".join(raw_chunks)):
+                spaced = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", word)
+                if spaced != word:
+                    parts = tuple(_tokenize(spaced))
+                    if (parts and parts != (word.lower(),)
+                            and (len(parts) > 1 or parts[0] in {"hpa", "vpa"})):
+                        identifier_parts.setdefault(word.lower(), set()).add(parts)
             for index, text in enumerate(pieces):
                 terms = Counter(_tokenize(text, split_identifiers=True))
                 self._chunks.append(_Chunk(document_id, index, text, terms))
                 self._frequencies.update(terms.keys())
+        self._identifier_parts = {word: next(iter(parts))
+                                  for word, parts in identifier_parts.items() if len(parts) == 1}
         self._average_length = (
             sum(sum(chunk.terms.values()) for chunk in self._chunks) / len(self._chunks)
             if self._chunks else 1.0
@@ -345,8 +406,44 @@ class LocalRAG:
 
         subject = re.sub(r"[A-Za-z0-9]+", correct_topic, subject)
         terms = set(_tokenize(subject, split_identifiers=True))
+        original_terms = set(terms)
+        # Exact known identifiers and their complete word forms are equivalent
+        # subjects. Keep the original vocabulary gate before this equivalence,
+        # so invented fields cannot borrow their component words as evidence.
+        for word, parts in self._identifier_parts.items():
+            if word in terms and word in vocabulary:
+                # Splitting can itself expose a normalized full name, such as
+                # HorizontalPodAutoscaler -> horizontal pod autoscaler -> HPA.
+                original = next((source for source in re.findall(r"[A-Za-z0-9]+", subject)
+                                 if source.lower() == word), word)
+                terms.difference_update(_tokenize(original, split_identifiers=True))
+                terms.update(parts)
+        field_values = []
+        # Preserve connector positions: 'ConfigMap and Secret' compares two
+        # subjects, whereas 'restartPolicy Always' asks for a field's value.
+        query_words = [tuple(_tokenize(word)) for word in re.findall(r"[A-Za-z0-9]+", subject)]
+        for word, parts in self._identifier_parts.items():
+            if word not in vocabulary or len(parts) < 2:
+                continue
+            for form in ((word,), parts):
+                for index in range(len(query_words) - len(form)):
+                    if tuple(query_words[index:index + len(form)]) == tuple((part,) for part in form):
+                        following = query_words[index + len(form)]
+                        if len(following) != 1:
+                            continue
+                        value = following[0]
+                        if value not in terms - set(parts) or value in {"kubernetes", "databricks", "job", "cronjob"}:
+                            continue
+                        relation = (set(parts), value)
+                        if relation not in field_values:
+                            field_values.append(relation)
         prefer_definition = bool(re.search(
             r"\b(?:what (?:is|are)|explain|clarify|describe)\b", subject, re.IGNORECASE))
+        prefer_how_definition = bool(re.fullmatch(
+            r"how\s+(?:do|does|did|can|could|will|would)\s+(?!i\b|you\b|we\b)"
+            r"[A-Za-z0-9][A-Za-z0-9 /_-]*?\s+(?:work|function|operate)\s*[?!.]*",
+            normalize_question(q), re.IGNORECASE))
+        prefer_definition = prefer_definition or prefer_how_definition
         prefer_quantity = bool(re.search(r"\bhow many\b", q, re.IGNORECASE))
         expanded = set().union(*(_EXPANSIONS.get(t, set()) for t in terms)) if terms else set()
         known = terms & vocabulary
@@ -360,8 +457,15 @@ class LocalRAG:
         # Unknown subject words must not be silently discarded in favor of
         # generic overlaps. Intent words and inflections are normalized above;
         # local mode conservatively declines unfamiliar content vocabulary.
-        if not terms or known != terms:
+        if not terms or not original_terms <= vocabulary or known != terms:
             return no_answer
+        if prefer_how_definition:
+            definition_documents = {
+                chunk.document_id for chunk in candidates
+                if _definition_start(chunk.text, known, headings_only=True) is not None
+            }
+            if definition_documents:
+                candidates = [chunk for chunk in candidates if chunk.document_id in definition_documents]
         term_weight = sum(self._idf(t) for t in known)
         supported_documents = {
             document_id for document_id in allowed
@@ -371,6 +475,7 @@ class LocalRAG:
         ranked = sorted(
             ((self._score(c, known, expanded, prefer_definition, prefer_quantity), c) for c in candidates
              if c.document_id in supported_documents
+             and all(_field_value_matches(c.text, field, value) for field, value in field_values)
              and sum(self._idf(t) for t in known & c.terms.keys()) / max(term_weight, 1e-9) >= 0.28),
             key=lambda item: (-item[0], item[1].document_id, item[1].index),
         )

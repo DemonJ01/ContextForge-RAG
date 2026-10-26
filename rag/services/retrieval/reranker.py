@@ -3,22 +3,22 @@ import logfire
 from flashrank import Ranker, RerankRequest
 
 # Lazy initialization - Ranker is loaded on first use to ensure logfire.configure() has run
+_RERANKER_MODEL = "ms-marco-TinyBERT-L-2-v2"
 _ranker = None
 
 
 def _get_ranker() -> Ranker:
     """
-    Initializes the FlashRank engine lazily. 
-    FlashRank uses a local ONNX model (ms-marco-MiniLM-L-6-v2) for ultra-fast reranking.
+    Initialize the explicit TinyBERT ONNX reranker lazily.
     """
     global _ranker
     if _ranker is None:
-        logfire.info("🧠 Initializing FlashRank Model (TinyBERT) locally...")
+        logfire.info(f"🧠 Initializing FlashRank model ({_RERANKER_MODEL}) locally...")
         try:
             # We use a specific cache directory to avoid permission issues in production
-            _ranker = Ranker(cache_dir="/tmp/flashrank")
+            _ranker = Ranker(model_name=_RERANKER_MODEL, cache_dir="/tmp/flashrank")
         except Exception:
-            _ranker = Ranker()
+            _ranker = Ranker(model_name=_RERANKER_MODEL)
     return _ranker
 
 

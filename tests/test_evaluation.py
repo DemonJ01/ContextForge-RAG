@@ -223,6 +223,50 @@ class EvaluationMetricsTests(unittest.TestCase):
         progress.assert_called_once_with("Scoring started")
 
 
+class EvaluationGuardrailTests(unittest.TestCase):
+    def test_unsuccessful_and_malformed_http_successes_never_count_as_passes(self):
+        requests = ModuleType("requests")
+        requests.exceptions = SimpleNamespace(ConnectionError=ConnectionError)
+        requests.post = Mock()
+        module = load_optional("evaluation/guardrails_evaluation.py", {"requests": requests})
+        bodies = [
+            {"answer": "The provider failed.", "status": "error", "thought_process": []},
+            {}, [], {"answer": " ", "thought_process": []},
+            {"answer": "Answer", "thought_process": "Intent: Guardrails Fired"},
+        ]
+        for body in bodies:
+            with self.subTest(body=body):
+                requests.post.return_value.json.return_value = body
+                results = module.run_guardrails_eval([
+                    {"id": "one", "input": "hello", "expected_blocked": False},
+                ])
+                self.assertEqual(results[0]["result"], "ERROR")
+                self.assertIsNone(results[0]["actual_blocked"])
+                metrics = module.compute_guardrails_metrics(results)
+                self.assertEqual(metrics["completed"], 0)
+                self.assertEqual(metrics["tn"], 0)
+                self.assertEqual(metrics["errors"], 1)
+
+    def test_valid_guardrail_outcomes_keep_all_four_confusion_matrix_categories(self):
+        requests = ModuleType("requests")
+        requests.exceptions = SimpleNamespace(ConnectionError=ConnectionError)
+        requests.post = Mock()
+        module = load_optional("evaluation/guardrails_evaluation.py", {"requests": requests})
+        for blocked, expected, category in ((True, True, "TP"), (False, False, "TN"),
+                                            (True, False, "FP"), (False, True, "FN")):
+            with self.subTest(category=category):
+                requests.post.return_value.json.return_value = {
+                    "answer": "A valid response.",
+                    "status": "Blocked by guardrails." if blocked else "complete",
+                    "thought_process": ["Intent: Guardrails Fired"] if blocked else [],
+                }
+                results = module.run_guardrails_eval([
+                    {"id": "one", "input": "question", "expected_blocked": expected},
+                ])
+                self.assertEqual(results[0]["result"], category)
+                self.assertEqual(results[0]["actual_blocked"], blocked)
+
+
 @unittest.skipUnless(
     importlib.util.find_spec("pandas") is not None and importlib.util.find_spec("streamlit") is not None,
     "Renderer integration requires the optional pandas and Streamlit packages.",
