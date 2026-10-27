@@ -1,109 +1,211 @@
-# RAG
+# ContextForge RAG
 
-A document workspace with a connected chat interface, searchable library, and inspectable source evidence. FastAPI serves the frontend and backend together, so one process runs the application.
+**Your sources. A clearer perspective.**
 
-The default **local mode works without API keys**. It ranks the included document text with BM25 and returns cited source excerpts. It does not run a language model. The optional cloud mode uses the original LangGraph, Groq/Portkey, Gemini, Qdrant, FlashRank, and NeMo pipeline.
+ContextForge RAG is a document workspace for asking questions, browsing a knowledge library, and inspecting the source passages behind an answer. A single FastAPI process serves the web interface and API.
 
-## Start
+Start locally with the included documents and **no API keys**. Local mode uses BM25 keyword retrieval to return cited excerpts; the optional cloud pipeline adds semantic retrieval and language-model answers.
 
-Use Python 3.11 or later. From the project directory:
+![ContextForge RAG workspace showing a Kubernetes CronJobs question, source excerpts, and the Evidence panel](https://github.com/user-attachments/assets/ff6cd969-5967-4890-ad17-bae16611a624)
+
+[Quick start](#quick-start) · [Workspace](#using-the-workspace) · [Cloud setup](#optional-cloud-pipeline) · [API](#api) · [Documentation](#documentation)
+
+## Features
+
+- **Inspect the evidence:** open numbered source passages and their extracted documents in local mode.
+- **Browse the library:** filter documents by title or filename and read their saved text.
+- **Choose a search scope:** query reference documents or the entire index.
+- **Keep conversations organized:** create separate chats, retain drafts, and revisit history saved in your browser.
+- **Enable cloud RAG:** use LangGraph, Groq through Portkey, Qdrant, FlashRank, and NeMo guardrails with your own provider configuration.
+- **Ingest documents from the command line:** process PDF, HTML, TXT, DOCX, and PPTX files with the optional cloud dependencies.
+
+## Quick start
+
+Requires **Python 3.11 or later** and Git to clone the repository.
+
+### macOS / Linux
 
 ```bash
-python3.12 -m venv .venv
+git clone https://github.com/DemonJ01/ContextForge-RAG.git
+cd ContextForge-RAG
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 python run_rag.py
 ```
 
-Open [RAG](http://127.0.0.1:8000). On Windows, use `python` and activate with `.venv\Scripts\Activate.ps1` in PowerShell. Use `python run_rag.py --port 8080` to choose another port.
+### Windows PowerShell
 
-No `.env`, cloud service, ingestion run, frontend build, or Streamlit server is needed for local mode. The frontend makes same-origin requests to `/query`, `/health`, and `/documents`.
+```powershell
+git clone https://github.com/DemonJ01/ContextForge-RAG.git
+cd ContextForge-RAG
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python run_rag.py
+```
 
-## Use the workspace
+If you already have the project, start from its directory and skip the clone steps. Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)**. To use another port, run `python run_rag.py --port 8080`.
 
-- Ask about CronJobs, autoscaling, job monitoring, Redis work queues, or Databricks jobs.
-- Read numbered evidence excerpts and open their source documents.
-- Use **Knowledge library** to browse and search the indexed document text.
-- Choose reference documents or the full index when asking a question.
-- Start a new conversation to keep questions separate. Browser history is stored locally; the local engine treats each question independently.
+The default local mode needs no `.env` file, ingestion run, frontend build, or Streamlit server. If your environment already sets `RAG_MODE=cloud`, change it to `local` for this quick start.
 
-The saved index contains **11 documents**: 6 reference documents and 5 distractors. Original source files remain in `data/`; local mode searches the text already saved in `processed_documents/`. Oversized saved chunks are split into bounded search chunks in memory. Unmatched questions return a no-evidence response.
+## Using the workspace
+
+1. Start a **New conversation** and ask a question, such as **“How do Kubernetes CronJobs work?”**
+2. Choose **Reference documents** or **Entire library** before sending your question.
+3. Read the response and inspect the **Evidence** panel to check the retrieved passages.
+4. Open **Knowledge library** to filter the document list and read extracted source text.
+
+The bundled library contains **11 documents: 6 reference documents and 5 distractors**. Example topics include Kubernetes CronJobs, pod autoscaling, job monitoring, Redis work queues, and Databricks jobs. Original files live in `data/`; local retrieval searches the text saved in `processed_documents/`.
+
+Conversation history and drafts are stored in your browser. Short local follow-ups can reuse the last supported subject within the same session and search scope. That server-side context is held in memory, expires after 30 minutes, and clears on restart.
+
+### Local and cloud modes
+
+| | Local mode (default) | Cloud mode (optional) |
+|---|---|---|
+| Retrieval | BM25 keyword ranking over saved document text | Embeddings, Qdrant vector search, and FlashRank reranking |
+| Answers | Extracted source passages; no language model | LangGraph workflow with Groq through Portkey |
+| Setup | Minimal Python dependencies; no provider keys | Cloud dependencies, provider credentials, and an ingested collection |
+| Document browser | Bundled extracted library | Bundled extracted library; cloud queries search the remote collection |
+
+Local retrieval recognizes common question phrasing, autoscaler names, and API field spellings, but still relies on word matching. Unfamiliar paraphrases can produce weak matches or no evidence. A completed response means passages were found; check whether they answer the whole question. The saved documents may describe older software defaults.
+
+The web workspace currently supports reading and querying documents. Add files through the ingestion command below. Restart the application after regenerating saved document text so it reloads the local index.
 
 ## Optional cloud pipeline
+
+Activate your virtual environment and install the additional dependencies:
 
 ```bash
 python -m pip install -r requirements-cloud.txt
 ```
 
-Create a private `.env` file in the project root, set `RAG_MODE=cloud`, and configure Groq, Portkey, Gemini, and Qdrant credentials using the [configuration guide](docs/environment_variables.md). The Portkey slug settings must match integrations in your account. `RAG_EMBEDDING_BACKEND` defaults to `gemini` (3072 dimensions); explicitly choose `local` for all-mpnet-base-v2 embeddings (768 dimensions). Use the same backend for ingestion and queries; provider failures stop the operation instead of changing models. Ingest documents into the selected Qdrant collection before querying it:
+Create a private `.env` file in the project root. Set `RAG_MODE=cloud` and configure:
+
+| Setting | Purpose |
+|---|---|
+| `GROQ_API_KEY` | Input guardrail classification |
+| `PORTKEY_API_KEY` | Planner and answer-generation gateway |
+| `PORTKEY_PRIMARY_SLUG`, `PORTKEY_FALLBACK_SLUG` | Integration names in your Portkey account; defaults are `rag` and `rag-fallback` |
+| `QDRANT_CLUSTER_ENDPOINT`, `QDRANT_API_KEY` | Qdrant connection |
+| `QDRANT_COLLECTION` | Collection name; defaults to `rag` |
+| `RAG_EMBEDDING_BACKEND` | `gemini` (default, 3072 dimensions) or `local` (768 dimensions) |
+| `GEMINI_API_KEY` | Required for Gemini embeddings |
+
+See the [environment-variable reference](docs/environment_variables.md) for model settings and optional tracing. Explicit `local` embeddings use `sentence-transformers/all-mpnet-base-v2`, which may download on first use. This still uses the cloud pipeline for generation and Qdrant retrieval.
+
+Ingest the bundled source files, then start the application:
 
 ```bash
 python -m rag.ingestion.document_processor data
 python run_rag.py
 ```
 
-`QDRANT_COLLECTION` defaults to `rag`. Set it to an existing collection name to reuse that collection, matching its embedding model and dimensions. The optional ingestion `--wipe` flag deletes and recreates the selected remote collection after validating the source directory and initializing the embedding provider. Cloud configuration failures return HTTP 503; the app does not silently switch to local answers.
+For your own reference documents, pass a directory and the `true` source label:
 
-Cloud requests honor `scope` and `top_k`. Reference scope selects remote points with `source_type=true`; use the full index for other source types. Re-ingestion replaces chunks for the same filename and source type, including obsolete chunks when a document shrinks. Failed embedding, indexing, and cleanup operations stop ingestion with an error. The bundled local index is loaded at startup, so restart the app after regenerating its processed documents.
+```bash
+python -m rag.ingestion.document_processor /path/to/documents true
+```
 
-The default Docker image supports local mode. A cloud image needs the optional cloud dependencies added explicitly.
+Use the same embedding model and backend for ingestion and queries. Choose a separate collection and re-ingest when changing models. Embedding failures stop the operation instead of silently switching models.
+
+Normal ingestion replaces chunks for the same filename and source type, including obsolete chunks after a successful upsert. The optional **`--wipe` flag deletes and recreates the selected Qdrant collection**. Reference scope selects remote points labeled `source_type="true"`; use `scope="all"` for other source types.
+
+Open the sidebar connection dialog or request `/configuration` for setup diagnostics without exposing credentials or contacting providers. Cloud `/health` also checks Qdrant readiness; run a real query to verify model-provider access. Missing cloud configuration returns HTTP 503 instead of switching to local answers.
 
 ## API
 
-| Route | Purpose |
-|---|---|
-| `GET /` | RAG web workspace |
-| `GET /health` | Runtime mode and actual index counts |
-| `GET /documents?scope=all` | Indexed document metadata |
-| `GET /documents/{id}` | Extracted source text |
-| `POST /query` | Answer, evidence, timing, and session ID |
-| `GET /graph` | Workflow diagram source |
-| `GET /docs` | Interactive API documentation |
+The web interface uses same-origin API requests. Explore the interactive API documentation at **[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)** while the application is running.
 
-```json
-{"q": "How do Kubernetes CronJobs work?", "scope": "reference", "top_k": 4}
+| Method | Route | Purpose |
+|---|---|---|
+| `GET` | `/` | Web workspace |
+| `GET` | `/health` | Runtime mode and index readiness |
+| `GET` | `/configuration` | Setup diagnostics without credential values |
+| `GET` | `/documents?scope=all` | Bundled document metadata |
+| `GET` | `/documents/{id}` | Extracted text for a bundled document |
+| `POST` | `/query` | Answer, evidence, timing, and session ID |
+| `GET` | `/graph` | Workflow diagram source |
+
+Example request from macOS or Linux:
+
+```bash
+curl -X POST http://127.0.0.1:8000/query \
+  -H 'Content-Type: application/json' \
+  -d '{"q":"How do Kubernetes CronJobs work?","scope":"reference","top_k":4}'
 ```
 
-An optional `thread_id` keeps cloud conversations associated with a session. If it is omitted, the API generates a fresh ID. Questions must contain 1–2,000 characters. Local answers quote the indexed source text and return structured `citations`, plus plain-text `sources` for legacy clients.
+Questions must contain **1–2,000 characters** after trimming. `scope` accepts `reference` (default) or `all`; `top_k` accepts integers from **1 to 8** (default: 4). Supply the same optional `thread_id` to associate follow-up questions with a session. Omit it to receive a new ID.
 
-## Tests
+Local responses include structured `citations` and plain-text `sources`. Cloud evidence is returned through `sources`.
+
+## Docker
+
+```bash
+docker build -t contextforge-rag .
+docker run --rm -p 127.0.0.1:8080:8080 contextforge-rag
+```
+
+Open **[http://127.0.0.1:8080](http://127.0.0.1:8080)**. The default image runs local mode and includes the bundled index. A cloud image requires the optional cloud dependencies and provider configuration.
+
+## Development and tests
+
+With your virtual environment active, install the test dependencies and run:
 
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
 ```
 
-The tests exercise retrieval relevance, no-evidence answers, chunk limits, source integrity, session IDs, request validation, HTTP failures, static assets, and frontend/backend contracts.
+The suite covers retrieval relevance, follow-ups, no-evidence responses, source integrity, request validation, runtime errors, static assets, and API contracts.
 
-## Container
+With Node.js installed, run the frontend state regressions for conversation drafts, navigation, retries, and interrupted requests:
 
 ```bash
-docker build -t rag .
-docker run --rm -p 8080:8080 rag
+node --test tests/test_web_state.cjs
 ```
 
-## Optional evaluation tools
+### Optional evaluation tools
 
 ```bash
 python -m pip install -r requirements-evaluation.txt
 streamlit run evaluation/rag_dashboard.py
 ```
 
-These tools use `BACKEND_URL` to connect to the running API. Judge-based evaluation needs provider credentials. Legacy chat scripts remain in `ui/rag_chat.py` and `ui/rag_chat_cloud.py`; the integrated web workspace is the primary interface.
+Start the API separately. These tools use `BACKEND_URL` to reach it; judge-based evaluation also requires provider credentials. Legacy Streamlit chat clients remain in `ui/rag_chat.py` and `ui/rag_chat_cloud.py`.
 
-## Files and guides
+## Project structure
 
 ```text
-rag/api.py                    HTTP routes and integrated frontend
-rag/runtime.py                Explicit local/cloud runtime selection
-rag/local_rag.py              Credential-free document index and evidence retrieval
-ui/web/                       Responsive workspace HTML, CSS, JavaScript
-processed_documents/          Saved extracted document text
-run_rag.py                    Local launcher
-requirements.txt              Minimal working runtime
-requirements-cloud.txt        Optional cloud integration dependencies
-requirements-evaluation.txt   Optional evaluation and Streamlit dependencies
-tests/                        Retrieval and API regression tests
+rag/
+  api.py                     HTTP routes and integrated frontend
+  runtime.py                 Local/cloud runtime selection
+  local_rag.py               BM25 retrieval and source evidence
+  agents/                    LangGraph cloud workflow
+  ingestion/                 Document loaders, chunking, and indexing
+  services/retrieval/        Embeddings, vector search, and reranking
+ui/web/                      Workspace HTML, CSS, and JavaScript
+data/                        Original source documents
+processed_documents/         Saved extracted text and chunk metadata
+evaluation/                  Evaluation pipeline and dashboard
+tests/                       Python and frontend regression tests
+docs/                        Setup and architecture guides
+run_rag.py                   Application launcher
+requirements.txt             Minimal local runtime
+requirements-cloud.txt       Optional cloud dependencies
+requirements-evaluation.txt  Optional evaluation dependencies
 ```
 
-[Configuration](docs/environment_variables.md) · [Cloud architecture](docs/architecture.md)
+## Documentation
+
+- [Environment variables](docs/environment_variables.md)
+- [Architecture](docs/architecture.md)
+- [System overview](docs/system_overview.md)
+- [Document ingestion](docs/document_ingestion.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Evaluation pipeline](docs/rag_evaluation_pipeline.md)
+
+## License
+
+Released under the [MIT License](LICENSE).
