@@ -45,7 +45,7 @@ python -m pip install -r requirements.txt
 python run_rag.py
 ```
 
-If you already have the project, start from its directory and skip the clone steps. Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)**. To use another port, run `python run_rag.py --port 8080`.
+If you already have the project, start from its directory and skip the clone steps.
 
 The default local mode needs no `.env` file, ingestion run, frontend build, or Streamlit server. If your environment already sets `RAG_MODE=cloud`, change it to `local` for this quick start.
 
@@ -145,7 +145,7 @@ docker build -t contextforge-rag .
 docker run --rm -p 127.0.0.1:8080:8080 contextforge-rag
 ```
 
-Open **[http://127.0.0.1:8080](http://127.0.0.1:8080)**. The default image runs local mode and includes the bundled index. A cloud image requires the optional cloud dependencies and provider configuration.
+A cloud image requires the optional cloud dependencies and provider configuration.
 
 ## Development and tests
 
