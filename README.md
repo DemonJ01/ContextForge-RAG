@@ -116,8 +116,6 @@ Open the sidebar connection dialog or request `/configuration` for setup diagnos
 
 ## API
 
-The web interface uses same-origin API requests. Explore the interactive API documentation at **[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)** while the application is running.
-
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/` | Web workspace |
